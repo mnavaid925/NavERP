@@ -1,0 +1,229 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}User Behavior Analytics & Alerts — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:audit_dashboard' %}">Audit & Reporting</a>
+            <span>/</span>
+            <span>Security Alerts</span>
+        </div>
+        <h1 class="page-title">User Behavior Analytics (UBA) & Incident Feed</h1>
+    </div>
+    <div class="page-actions">
+        <form method="post" action="{% url 'documents:security_alert_scan' %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline" title="Trigger heuristic anomaly scanner on recent 24-hour audit stream">
+                <i data-lucide="scan"></i>
+                <span>Run Heuristic Scan</span>
+            </button>
+        </form>
+        <a href="{% url 'documents:audit_dashboard' %}" class="btn btn-primary">
+            <i data-lucide="activity"></i>
+            <span>Audit Dashboard</span>
+        </a>
+    </div>
+</div>
+
+<!-- Threat Summary KPIs -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon {% if open_count > 0 %}red{% else %}green{% endif %}">
+            <i data-lucide="shield-alert"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ open_count }}</div>
+            <div class="stat-label">Active / Open Incidents</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon {% if critical_count > 0 %}red{% else %}slate{% endif %}">
+            <i data-lucide="flame"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ critical_count }}</div>
+            <div class="stat-label">Critical Threat Alerts</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="cpu"></i>
+        </div>
+        <div>
+            <div class="stat-value text-base font-semibold">Heuristic Engine</div>
+            <div class="stat-label">Behavioral Profiling</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="zap"></i>
+        </div>
+        <div>
+            <div class="stat-value text-base font-semibold">Automated Triage</div>
+            <div class="stat-label">Countermeasure Actions</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+            <div class="form-group lg:col-span-2">
+                <label class="form-label" for="id_q">Search Incidents</label>
+                <input type="text" name="q" id="id_q" value="{{ request.GET.q }}" placeholder="Search title, actor, notes, or IP..." class="form-input w-full">
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_severity">Severity</label>
+                <select name="severity" id="id_severity" class="form-select w-full">
+                    <option value="">All Severities</option>
+                    {% for val, label in severity_choices %}
+                    <option value="{{ val }}" {% if request.GET.severity == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_status">Triage Status</label>
+                <select name="status" id="id_status" class="form-select w-full">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="btn btn-primary w-full">
+                    <i data-lucide="filter"></i>
+                    <span>Filter</span>
+                </button>
+                <a href="{% url 'documents:security_alert_list' %}" class="btn btn-outline" title="Clear">
+                    <i data-lucide="rotate-ccw"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Incident Feed Table -->
+<div class="card">
+    <div class="card-header flex items-center justify-between">
+        <h2 class="text-base font-semibold text-slate-800">Security Alert Incidents</h2>
+        <span class="text-xs text-slate-500">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Alert #</th>
+                    <th>Detected</th>
+                    <th>Severity & Score</th>
+                    <th>Incident Headline</th>
+                    <th>Target User</th>
+                    <th>Status</th>
+                    <th>Mitigation</th>
+                    <th class="text-right">Triage</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for alert in alerts %}
+                <tr>
+                    <td class="font-mono text-xs font-semibold text-slate-800">
+                        <a href="{% url 'documents:security_alert_detail' alert.pk %}" class="hover:underline">
+                            {{ alert.number }}
+                        </a>
+                    </td>
+                    <td class="text-xs text-slate-500 whitespace-nowrap">
+                        {{ alert.detected_at|date:"Y-m-d H:i" }}
+                    </td>
+                    <td>
+                        <div class="flex items-center gap-1.5">
+                            <span class="badge {{ alert.get_severity_badge }}">
+                                {{ alert.get_severity_display }}
+                            </span>
+                            <span class="text-xs font-bold font-mono px-1.5 py-0.5 rounded {% if alert.risk_score >= 80 %}bg-red-100 text-red-800{% elif alert.risk_score >= 50 %}bg-amber-100 text-amber-800{% else %}bg-slate-100 text-slate-800{% endif %}" title="Risk Score: {{ alert.risk_score }}/100">
+                                {{ alert.risk_score }}
+                            </span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="font-medium text-sm text-slate-800">
+                            <a href="{% url 'documents:security_alert_detail' alert.pk %}" class="hover:underline">
+                                {{ alert.title }}
+                            </a>
+                        </div>
+                        <div class="text-xs text-slate-400 mt-0.5">{{ alert.get_alert_type_display }} &bull; {{ alert.event_count }} event(s)</div>
+                    </td>
+                    <td>
+                        {% if alert.target_user %}
+                        <div class="text-sm font-medium text-slate-800">
+                            {{ alert.target_user.get_full_name|default:alert.target_user.email }}
+                        </div>
+                        <div class="text-xs text-slate-400 font-mono">{{ alert.source_ip|default:"Internal" }}</div>
+                        {% else %}
+                        <span class="text-slate-400 italic text-sm">System / Anonymous</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ alert.get_status_badge }}">
+                            {{ alert.get_status_display }}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="text-xs text-slate-600 font-medium">
+                            {{ alert.get_action_taken_display }}
+                        </span>
+                    </td>
+                    <td class="table-actions text-right">
+                        <a href="{% url 'documents:security_alert_detail' alert.pk %}" class="btn btn-icon btn-outline" title="Investigate & Triage">
+                            <i data-lucide="shield"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state py-8">
+                            <div class="empty-icon">
+                                <i data-lucide="shield-check"></i>
+                            </div>
+                            <h3>No Security Incidents</h3>
+                            <p class="text-slate-500 text-sm">No anomalous activity has breached baseline thresholds.</p>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if page_obj.paginator.num_pages > 1 %}
+    <div class="card-body border-t border-slate-100 flex items-center justify-between">
+        <div class="text-sm text-slate-500">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ page_obj.paginator.count }} incidents
+        </div>
+        <div class="pagination">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.severity %}&severity={{ request.GET.severity }}{% endif %}" class="btn btn-outline btn-sm">
+                <i data-lucide="chevron-left"></i>
+                <span>Previous</span>
+            </a>
+            {% endif %}
+            <span class="text-sm font-medium text-slate-700 px-3 py-1">
+                {{ page_obj.number }} / {{ page_obj.paginator.num_pages }}
+            </span>
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.severity %}&severity={{ request.GET.severity }}{% endif %}" class="btn btn-outline btn-sm">
+                <span>Next</span>
+                <i data-lucide="chevron-right"></i>
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
