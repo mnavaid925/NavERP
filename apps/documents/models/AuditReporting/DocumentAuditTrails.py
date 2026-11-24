@@ -177,6 +177,10 @@ class DocumentAuditTrail(TenantNumbered):
             models.Index(fields=["tenant", "actor"], name="doc_daud_tnt_usr_idx"),
             models.Index(fields=["tenant", "is_success"], name="doc_daud_tnt_suc_idx"),
             models.Index(fields=["tenant", "chain_hash"], name="doc_daud_chn_hsh_idx"),
+            models.Index(fields=["tenant", "action_type", "-event_timestamp"], name="doc_daud_tnt_act_ts_idx"),
+            models.Index(fields=["tenant", "document", "-event_timestamp"], name="doc_daud_tnt_doc_ts_idx"),
+            models.Index(fields=["tenant", "actor", "-event_timestamp"], name="doc_daud_tnt_actr_ts_idx"),
+            models.Index(fields=["tenant", "event_timestamp", "action_type"], name="doc_daud_tnt_ts_act_idx"),
         ]
 
     def __str__(self):
