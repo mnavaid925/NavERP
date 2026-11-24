@@ -208,7 +208,7 @@
         </div>
         <div class="pagination">
             {% if page_obj.has_previous %}
-            <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.severity %}&severity={{ request.GET.severity }}{% endif %}" class="btn btn-outline btn-sm">
+            <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.severity %}&severity={{ request.GET.severity }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.alert_type %}&alert_type={{ request.GET.alert_type }}{% endif %}" class="btn btn-outline btn-sm">
                 <i data-lucide="chevron-left"></i>
                 <span>Previous</span>
             </a>
@@ -217,7 +217,7 @@
                 {{ page_obj.number }} / {{ page_obj.paginator.num_pages }}
             </span>
             {% if page_obj.has_next %}
-            <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.severity %}&severity={{ request.GET.severity }}{% endif %}" class="btn btn-outline btn-sm">
+            <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.severity %}&severity={{ request.GET.severity }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.alert_type %}&alert_type={{ request.GET.alert_type }}{% endif %}" class="btn btn-outline btn-sm">
                 <span>Next</span>
                 <i data-lucide="chevron-right"></i>
             </a>
