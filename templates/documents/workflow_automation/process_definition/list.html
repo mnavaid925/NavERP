@@ -1,0 +1,215 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}BPM Process Definitions — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <span>Workflow Automation &amp; BPM</span>
+            <span>/</span>
+            <span>Process Definitions</span>
+        </div>
+        <h1 class="page-title">Business Process Definitions</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:process_analytics_dashboard' %}" class="btn btn-outline">
+            <i data-lucide="bar-chart-3"></i>
+            <span>Process Analytics</span>
+        </a>
+        <a href="{% url 'documents:process_instance_list' %}" class="btn btn-outline">
+            <i data-lucide="play-circle"></i>
+            <span>Instances</span>
+        </a>
+        <a href="{% url 'documents:process_definition_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Process Blueprint</span>
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="git-branch"></i></div>
+        <div>
+            <div class="stat-value">{{ total_count }}</div>
+            <div class="stat-label">Process Blueprints</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="check-circle-2"></i></div>
+        <div>
+            <div class="stat-value">{{ published_count }}</div>
+            <div class="stat-label">Published</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon slate"><i data-lucide="file-edit"></i></div>
+        <div>
+            <div class="stat-value">{{ draft_count }}</div>
+            <div class="stat-label">Drafts</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="zap"></i></div>
+        <div>
+            <div class="stat-value">{{ active_count }}</div>
+            <div class="stat-label">Active Triggers</div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
+            <div class="form-group">
+                <label class="form-label" for="id_q">Search</label>
+                <input type="text" id="id_q" name="q" value="{{ q }}" placeholder="Code, name, DBPM-..." class="form-input w-full">
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_status">Status</label>
+                <select id="id_status" name="status" class="form-select w-full">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_category">Category</label>
+                <select id="id_category" name="category" class="form-select w-full">
+                    <option value="">All Categories</option>
+                    {% for val, label in category_choices %}
+                    <option value="{{ val }}" {% if category == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_trigger_event">Trigger</label>
+                <select id="id_trigger_event" name="trigger_event" class="form-select w-full">
+                    <option value="">All Triggers</option>
+                    {% for val, label in trigger_choices %}
+                    <option value="{{ val }}" {% if trigger_event == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_department">Department</label>
+                <select id="id_department" name="department" class="form-select w-full">
+                    <option value="">All Departments</option>
+                    {% for dept in departments %}
+                    <option value="{{ dept.pk|stringformat:'d' }}" {% if department == dept.pk|stringformat:'d' %}selected{% endif %}>{{ dept.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="btn btn-primary flex-1">
+                    <i data-lucide="filter"></i>
+                    <span>Filter</span>
+                </button>
+                <a href="{% url 'documents:process_definition_list' %}" class="btn btn-outline" title="Reset Filters" aria-label="Reset Filters">
+                    <i data-lucide="rotate-ccw"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Blueprint</th>
+                    <th>Category</th>
+                    <th>Trigger Event</th>
+                    <th>BPMN Graph</th>
+                    <th>SLA Target</th>
+                    <th>Runs</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for proc in process_definitions %}
+                <tr>
+                    <td>
+                        <a href="{% url 'documents:process_definition_detail' proc.pk %}" class="font-semibold text-blue-600 hover:underline">
+                            {{ proc.name }}
+                        </a>
+                        <div class="text-xs text-slate-500 font-mono">{{ proc.number }} · {{ proc.code }} v{{ proc.version_number }}</div>
+                    </td>
+                    <td>
+                        <span class="badge {{ proc.category_badge }}">{{ proc.get_process_category_display }}</span>
+                    </td>
+                    <td class="text-sm text-slate-700">
+                        {{ proc.get_trigger_event_display }}
+                        {% if proc.department %}
+                        <div class="text-xs text-slate-500">{{ proc.department.name }}</div>
+                        {% endif %}
+                    </td>
+                    <td class="text-xs text-slate-600">
+                        {{ proc.swimlane_count }} lanes · {{ proc.node_count }} nodes · {{ proc.transition_count }} edges
+                    </td>
+                    <td class="text-sm font-mono text-slate-700">{{ proc.sla_target_hours }}h</td>
+                    <td class="text-sm font-semibold text-slate-800">{{ proc.instance_count }}</td>
+                    <td>
+                        <span class="badge {{ proc.status_badge }}">{{ proc.get_status_display }}</span>
+                    </td>
+                    <td class="table-actions text-right">
+                        <a href="{% url 'documents:process_definition_detail' proc.pk %}" class="btn btn-icon btn-outline" title="View Blueprint" aria-label="View {{ proc.number }}">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'documents:process_definition_designer' proc.pk %}" class="btn btn-icon btn-outline" title="Visual Designer" aria-label="Design {{ proc.number }}">
+                            <i data-lucide="workflow"></i>
+                        </a>
+                        {% if proc.status != 'archived' %}
+                        <a href="{% url 'documents:process_definition_edit' proc.pk %}" class="btn btn-icon btn-outline" title="Edit Blueprint" aria-label="Edit {{ proc.number }}">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        {% endif %}
+                        {% if proc.status == 'draft' %}
+                        {% if user.is_superuser or user.is_tenant_admin %}
+                        <form method="post" action="{% url 'documents:process_definition_delete' proc.pk %}" class="inline" onsubmit="return confirm('Delete process definition {{ proc.number }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon btn-danger" title="Delete Blueprint" aria-label="Delete {{ proc.number }}">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                        {% endif %}
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state">
+                            <i data-lucide="git-branch" class="w-10 h-10 text-slate-300 mx-auto mb-2"></i>
+                            <p class="font-medium text-slate-700">No process definitions found</p>
+                            <p class="text-xs text-slate-500 mb-3">Design reusable BPMN workflows with swimlanes and decision gateways.</p>
+                            <a href="{% url 'documents:process_definition_create' %}" class="btn btn-primary btn-sm">New Process Blueprint</a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if page_obj.has_other_pages %}
+    <div class="pagination">
+        <span class="text-xs text-slate-500">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+        <div class="flex items-center gap-2">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}&q={{ q|urlencode }}&status={{ status|urlencode }}&category={{ category|urlencode }}&trigger_event={{ trigger_event|urlencode }}&department={{ department|urlencode }}" class="btn btn-outline btn-sm">Previous</a>
+            {% endif %}
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}&q={{ q|urlencode }}&status={{ status|urlencode }}&category={{ category|urlencode }}&trigger_event={{ trigger_event|urlencode }}&department={{ department|urlencode }}" class="btn btn-outline btn-sm">Next</a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
