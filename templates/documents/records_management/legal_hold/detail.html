@@ -1,0 +1,203 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Legal Hold {{ hold.number }} — {{ hold.matter_name }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:legal_hold_list' %}">Legal Holds</a>
+            <span>/</span>
+            <span>{{ hold.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ hold.number }} — {{ hold.matter_name }}</h1>
+            <span class="badge {{ hold.reason_badge_class }}">{{ hold.get_hold_reason_display }}</span>
+            {% if hold.is_active %}
+            <span class="badge badge-red flex items-center gap-1">
+                <i data-lucide="lock" class="w-3 h-3"></i> Active Preservation
+            </span>
+            {% else %}
+            <span class="badge badge-muted">Hold Released</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:legal_hold_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Back to Legal Holds</span>
+        </a>
+        {% if hold.is_active and hold.custodian == request.user and not hold.custodian_acknowledged_at %}
+        <form method="post" action="{% url 'documents:legal_hold_acknowledge' hold.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary bg-amber-600 hover:bg-amber-700">
+                <i data-lucide="check-square"></i>
+                <span>Acknowledge Custodian Notice</span>
+            </button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Preservation Notice Banner -->
+<div class="card mb-6 {% if hold.is_active %}border-red-300 bg-red-50{% else %}border-slate-200 bg-slate-50{% endif %}">
+    <div class="card-body flex items-start gap-3">
+        <i data-lucide="{% if hold.is_active %}shield-alert{% else %}check-circle{% endif %}" class="w-6 h-6 {% if hold.is_active %}text-red-600{% else %}text-slate-500{% endif %} mt-0.5 flex-shrink-0"></i>
+        <div>
+            <h2 class="font-semibold {% if hold.is_active %}text-red-900{% else %}text-slate-800{% endif %} text-base">
+                {% if hold.is_active %}Defensible In-Place Preservation Active{% else %}Preservation Order Released{% endif %}
+            </h2>
+            <p class="text-sm {% if hold.is_active %}text-red-700{% else %}text-slate-600{% endif %} mt-1">
+                {% if hold.is_active %}
+                This document is subject to mandatory preservation in connection with <strong>{{ hold.matter_name }}</strong> (Matter: {{ hold.matter_number }}). Any routine deletion, modification, or automated disposition schedules are suspended until this order is officially released by counsel.
+                {% else %}
+                This legal hold was formally released on {{ hold.released_at|date:"Y-m-d H:i" }} by {% if hold.released_by %}{{ hold.released_by.get_full_name|default:hold.released_by.username }}{% else %}authorized counsel{% endif %}.
+                {% endif %}
+            </p>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div class="lg:col-span-2 space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Hold Specification & Metadata</h2>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>Hold Record Number</dt>
+                        <dd class="font-mono font-semibold text-slate-800">{{ hold.number }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Matter / Case Name</dt>
+                        <dd class="font-semibold text-slate-900">{{ hold.matter_name }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Matter Docket / File #</dt>
+                        <dd class="font-mono text-slate-700">{{ hold.matter_number }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Hold Reason</dt>
+                        <dd>
+                            <span class="badge {{ hold.reason_badge_class }}">{{ hold.get_hold_reason_display }}</span>
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Target Document</dt>
+                        <dd>
+                            <a href="{% url 'documents:document_detail' hold.document.pk %}" class="text-primary font-medium hover:underline">
+                                {{ hold.document.title }}
+                            </a>
+                            <span class="text-xs text-slate-500 font-mono block">{{ hold.document.document_number }}</span>
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Placed By</dt>
+                        <dd>
+                            {% if hold.placed_by %}{{ hold.placed_by.get_full_name|default:hold.placed_by.username }}{% else %}—{% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Placement Date</dt>
+                        <dd>{{ hold.placed_at|date:"Y-m-d H:i" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Designated Custodian</dt>
+                        <dd>
+                            {% if hold.custodian %}
+                            <div class="font-medium text-slate-900">{{ hold.custodian.get_full_name|default:hold.custodian.username }}</div>
+                            {% if hold.custodian_acknowledged_at %}
+                            <div class="text-xs text-green-600 flex items-center gap-1 mt-0.5">
+                                <i data-lucide="check" class="w-3 h-3"></i> Acknowledged {{ hold.custodian_acknowledged_at|date:"Y-m-d H:i" }}
+                            </div>
+                            {% else %}
+                            <div class="text-xs text-amber-600 mt-0.5">Acknowledgment Pending</div>
+                            {% endif %}
+                            {% else %}
+                            <span class="text-slate-400">None Assigned</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    {% if hold.core_legal_hold %}
+                    <div class="detail-item">
+                        <dt>Enterprise Legal Hold Link</dt>
+                        <dd class="font-medium text-slate-800">{{ hold.core_legal_hold.name }}</dd>
+                    </div>
+                    {% endif %}
+                </dl>
+
+                {% if hold.description %}
+                <div class="mt-6 pt-4 border-t border-slate-200">
+                    <h3 class="text-sm font-semibold text-slate-700 mb-1">Preservation Scope & Instructions</h3>
+                    <p class="text-slate-600 text-sm whitespace-pre-line">{{ hold.description }}</p>
+                </div>
+                {% endif %}
+
+                {% if not hold.is_active and hold.release_justification %}
+                <div class="mt-6 pt-4 border-t border-slate-200 bg-slate-50 p-4 rounded-lg">
+                    <h3 class="text-sm font-semibold text-slate-800 mb-1">Hold Release Authorization</h3>
+                    <div class="text-xs text-slate-500 mb-2">
+                        Released by {% if hold.released_by %}{{ hold.released_by.get_full_name|default:hold.released_by.username }}{% else %}—{% endif %} on {{ hold.released_at|date:"Y-m-d H:i" }}
+                    </div>
+                    <p class="text-slate-700 text-sm whitespace-pre-line font-mono">{{ hold.release_justification }}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Release Form Card (Only if active) -->
+        {% if hold.is_active %}
+        <div class="card border-amber-200">
+            <div class="card-header bg-amber-50">
+                <h2 class="card-title text-amber-900">Release Legal Hold</h2>
+            </div>
+            <div class="card-body">
+                <form method="post" action="{% url 'documents:legal_hold_release' hold.pk %}" class="space-y-4">
+                    {% csrf_token %}
+                    <p class="text-sm text-slate-600">
+                        Lifting this hold will remove the litigation preservation freeze from <strong>{{ hold.document.title }}</strong> and resume standard records retention schedules. Provide mandatory legal justification for the defensible audit trail.
+                    </p>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ release_form.release_justification.id_for_label }}">Release Justification *</label>
+                        {{ release_form.release_justification }}
+                        <span class="text-xs text-slate-500">{{ release_form.release_justification.help_text }}</span>
+                    </div>
+                    <button type="submit" class="btn btn-danger" onclick="return confirm('Are you sure you want to lift this legal hold? This action is logged permanently.');">
+                        <i data-lucide="unlock"></i>
+                        <span>Formally Lift Legal Hold</span>
+                    </button>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Sidebar Cards -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Preservation Impact</h3>
+            </div>
+            <div class="card-body text-xs text-slate-600 space-y-3">
+                <div class="flex items-start gap-2">
+                    <i data-lucide="shield" class="w-4 h-4 text-primary mt-0.5 flex-shrink-0"></i>
+                    <span>Disposition blocks are strictly enforced across all destruction modules.</span>
+                </div>
+                <div class="flex items-start gap-2">
+                    <i data-lucide="file-check" class="w-4 h-4 text-primary mt-0.5 flex-shrink-0"></i>
+                    <span>Document cannot be deleted from repository while hold is active.</span>
+                </div>
+                <div class="flex items-start gap-2">
+                    <i data-lucide="user-check" class="w-4 h-4 text-primary mt-0.5 flex-shrink-0"></i>
+                    <span>Custodian receipt tracking ensures compliance with discovery notice duties.</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
