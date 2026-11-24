@@ -30,7 +30,7 @@
 <!-- Filter Bar -->
 <div class="card mb-6">
     <div class="card-body">
-        <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-4">
             <div>
                 <label class="form-label" for="q">Search</label>
                 <input type="text" id="q" name="q" class="form-input" placeholder="Certificate #, document title..." value="{{ query }}">
@@ -50,6 +50,15 @@
                     <option value="">All Types</option>
                     {% for code, label in type_choices %}
                     <option value="{{ code }}" {% if current_type == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label" for="destruction_method">Sanitization Method</label>
+                <select id="destruction_method" name="destruction_method" class="form-select">
+                    <option value="">All Methods</option>
+                    {% for code, label in method_choices %}
+                    <option value="{{ code }}" {% if current_method == code %}selected{% endif %}>{{ label }}</option>
                     {% endfor %}
                 </select>
             </div>
@@ -157,13 +166,13 @@
             Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} certificates
         </div>
         <div class="pagination-controls">
-            <a href="?page={% if page_obj.has_previous %}{{ page_obj.previous_page_number }}{% else %}1{% endif %}{% if query %}&q={{ query }}{% endif %}{% if current_status %}&status={{ current_status }}{% endif %}{% if current_type %}&disposition_type={{ current_type }}{% endif %}" class="btn btn-outline btn-icon {% if not page_obj.has_previous %}disabled{% endif %}">
+            <a href="?page={% if page_obj.has_previous %}{{ page_obj.previous_page_number }}{% else %}1{% endif %}{% if query %}&q={{ query }}{% endif %}{% if current_status %}&status={{ current_status }}{% endif %}{% if current_type %}&disposition_type={{ current_type }}{% endif %}{% if current_method %}&destruction_method={{ current_method }}{% endif %}" class="btn btn-outline btn-icon {% if not page_obj.has_previous %}disabled{% endif %}">
                 <i data-lucide="chevron-left"></i>
             </a>
             <span class="pagination-current">
                 Page {{ page_obj.number }} of {{ paginator.num_pages }}
             </span>
-            <a href="?page={% if page_obj.has_next %}{{ page_obj.next_page_number }}{% else %}{{ paginator.num_pages }}{% endif %}{% if query %}&q={{ query }}{% endif %}{% if current_status %}&status={{ current_status }}{% endif %}{% if current_type %}&disposition_type={{ current_type }}{% endif %}" class="btn btn-outline btn-icon {% if not page_obj.has_next %}disabled{% endif %}">
+            <a href="?page={% if page_obj.has_next %}{{ page_obj.next_page_number }}{% else %}{{ paginator.num_pages }}{% endif %}{% if query %}&q={{ query }}{% endif %}{% if current_status %}&status={{ current_status }}{% endif %}{% if current_type %}&disposition_type={{ current_type }}{% endif %}{% if current_method %}&destruction_method={{ current_method }}{% endif %}" class="btn btn-outline btn-icon {% if not page_obj.has_next %}disabled{% endif %}">
                 <i data-lucide="chevron-right"></i>
             </a>
         </div>
