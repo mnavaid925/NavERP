@@ -3595,6 +3595,17 @@ LIVE_LINKS = {
         # Extra live leaves:
         "Document Shares": "documents:document_share_list",
     },
+    # 13.9 Records Management & Compliance
+    "13.9": {
+        "Records Classification & Retention": "documents:retention_schedule_list",
+        "Records Declaration & Filing": "documents:record_declaration_list",
+        "Legal Hold & eDiscovery": "documents:legal_hold_list",
+        "Disposition & Destruction": "documents:destruction_certificate_list",
+        "Compliance Framework Mapping": "documents:retention_schedule_list",
+        # Extra live leaves:
+        "Disposition Review Board": "documents:disposition_review_board",
+        "Vital Records Register": "documents:vital_records_list",
+    },
 
 
 
