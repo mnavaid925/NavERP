@@ -5,7 +5,15 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.utils import timezone
 
-from apps.core.models import OrgUnit, Party, Tenant
+from apps.accounts.models import Role
+from apps.core.models import (
+    BusinessRule,
+    ConnectorDefinition,
+    OrgUnit,
+    Party,
+    Tenant,
+    WorkflowDefinition,
+)
 from apps.documents.models import (
     AuditReportDefinition,
     ChainOfCustodyExport,
@@ -28,8 +36,11 @@ from apps.documents.models import (
     DocumentLock,
     DocumentMetadataValue,
     DocumentOcrJob,
+    DocumentProcessDefinition,
+    DocumentProcessInstance,
     DocumentRelationship,
     DocumentReviewComment,
+    DocumentRoutingRule,
     DocumentSavedSearch,
     DocumentSearchAlert,
     DocumentSearchQueryLog,
@@ -40,6 +51,7 @@ from apps.documents.models import (
     DocumentTask,
     DocumentTemplate,
     DocumentVersion,
+    DocumentWebhookTrigger,
     DraftCollaboration,
     MetadataSchema,
     RecordDeclaration,
@@ -65,6 +77,10 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         if options.get("flush"):
             self.stdout.write("Flushing documents module data...")
+            DocumentWebhookTrigger.objects.all().delete()
+            DocumentProcessInstance.objects.all().delete()
+            DocumentRoutingRule.objects.all().delete()
+            DocumentProcessDefinition.objects.all().delete()
             ChainOfCustodyExport.objects.all().delete()
             DocumentSecurityAlert.objects.all().delete()
             AuditReportDefinition.objects.all().delete()
@@ -2123,6 +2139,402 @@ class Command(BaseCommand):
                     )
                     custody_pkg.set_passcode("Audit2026!")
                     custody_pkg.save()
+
+                # ---------------------------------------------------------
+                # 13.11 Workflow Automation & BPM Demo Data
+                # ---------------------------------------------------------
+                if not DocumentProcessDefinition.objects.filter(tenant=tenant).exists():
+                    self.stdout.write(f"Seeding Workflow Automation & BPM records for tenant '{tenant.slug}'...")
+                    now = timezone.now()
+                    docs_list = list(Document.objects.filter(tenant=tenant).order_by("pk")[:4])
+                    folders_list = list(DocumentFolder.objects.filter(tenant=tenant).order_by("pk")[:3])
+                    org_units_list = list(OrgUnit.objects.filter(tenant=tenant).order_by("pk")[:2])
+                    roles_list = list(Role.objects.filter(tenant=tenant).order_by("pk")[:2])
+                    core_wf = WorkflowDefinition.objects.filter(tenant=tenant).order_by("pk").first()
+                    core_rule = BusinessRule.objects.filter(tenant=tenant).order_by("pk").first()
+                    core_conn = ConnectorDefinition.objects.filter(tenant=tenant).order_by("pk").first()
+                    existing_approval_wf = (
+                        DocumentApprovalWorkflow.objects.filter(tenant=tenant).order_by("pk").first()
+                    )
+
+                    folder_0 = folders_list[0] if folders_list else None
+                    folder_1 = folders_list[1] if len(folders_list) > 1 else folder_0
+                    ou_0 = org_units_list[0] if org_units_list else org_unit
+                    ou_1 = org_units_list[1] if len(org_units_list) > 1 else ou_0
+                    role_0 = roles_list[0] if roles_list else None
+
+                    proc_contract = DocumentProcessDefinition.objects.create(
+                        tenant=tenant,
+                        name="Enterprise Contract Intake & Dual-Signoff",
+                        code="DBPM-CONTRACT-INTAKE",
+                        description="End-to-end BPMN intake, OCR metadata extraction, value threshold gateway, and dual legal/executive approval flow.",
+                        process_category="contract_review",
+                        trigger_event="document_created",
+                        target_document_type="contract",
+                        target_folder=folder_0,
+                        department=ou_0,
+                        owner=user,
+                        core_workflow_ref=core_wf,
+                        version_number=1,
+                        status="published",
+                        is_active=True,
+                        sla_target_hours=48,
+                        published_at=now - timezone.timedelta(days=14),
+                        swimlanes_json=[
+                            {"id": "lane_intake", "name": "Intake & Triage", "role": "DMS Coordinator"},
+                            {"id": "lane_legal", "name": "Legal & Compliance", "role": "Legal Counsel"},
+                            {"id": "lane_exec", "name": "Executive Signoff", "role": "Finance Director"},
+                        ],
+                        nodes_json=[
+                            {"id": "n_start", "type": "start_event", "label": "Contract Received", "lane_id": "lane_intake"},
+                            {"id": "n_ocr", "type": "service_task", "label": "OCR & Clause Extraction", "lane_id": "lane_intake"},
+                            {"id": "n_gw", "type": "exclusive_gateway", "label": "High Risk / Confidential?", "lane_id": "lane_legal"},
+                            {"id": "n_legal", "type": "approval_subprocess", "label": "Legal & CFO Approval", "lane_id": "lane_exec"},
+                            {"id": "n_std", "type": "user_task", "label": "Standard Desk Verification", "lane_id": "lane_legal"},
+                            {"id": "n_whk", "type": "webhook_task", "label": "Notify ERP Downstream", "lane_id": "lane_exec"},
+                            {"id": "n_end", "type": "end_event", "label": "Contract Executed & Archived", "lane_id": "lane_exec"},
+                        ],
+                        transitions_json=[
+                            {"from_node": "n_start", "to_node": "n_ocr", "label": "Auto-extract"},
+                            {"from_node": "n_ocr", "to_node": "n_gw", "label": "Evaluate risk"},
+                            {"from_node": "n_gw", "to_node": "n_legal", "label": "Confidential / High Value", "condition_label": "classification == confidential"},
+                            {"from_node": "n_gw", "to_node": "n_std", "label": "Standard", "is_default": True},
+                            {"from_node": "n_legal", "to_node": "n_whk", "label": "Approved"},
+                            {"from_node": "n_std", "to_node": "n_whk", "label": "Verified"},
+                            {"from_node": "n_whk", "to_node": "n_end", "label": "Dispatched"},
+                        ],
+                    )
+
+                    proc_policy = DocumentProcessDefinition.objects.create(
+                        tenant=tenant,
+                        name="Regulatory Policy Lifecycle & Attestation",
+                        code="DBPM-POLICY-LIFECYCLE",
+                        description="Controlled policy revision review, compliance officer verification, and publication archive lifecycle.",
+                        process_category="compliance_routing",
+                        trigger_event="status_changed",
+                        target_document_type="policy",
+                        target_folder=folder_1,
+                        department=ou_1,
+                        owner=user,
+                        version_number=1,
+                        status="published",
+                        is_active=True,
+                        sla_target_hours=72,
+                        published_at=now - timezone.timedelta(days=20),
+                        swimlanes_json=[
+                            {"id": "lane_comp", "name": "Compliance Governance", "role": "Compliance Lead"},
+                            {"id": "lane_rec", "name": "Records Control", "role": "Records Officer"},
+                        ],
+                        nodes_json=[
+                            {"id": "p_start", "type": "start_event", "label": "Policy Draft Submitted", "lane_id": "lane_comp"},
+                            {"id": "p_rev", "type": "user_task", "label": "Compliance Clause Review", "lane_id": "lane_comp"},
+                            {"id": "p_app", "type": "approval_subprocess", "label": "Board Policy Ratification", "lane_id": "lane_comp"},
+                            {"id": "p_end", "type": "end_event", "label": "Published & Effective", "lane_id": "lane_rec"},
+                        ],
+                        transitions_json=[
+                            {"from_node": "p_start", "to_node": "p_rev", "label": "Submit"},
+                            {"from_node": "p_rev", "to_node": "p_app", "label": "Checked"},
+                            {"from_node": "p_app", "to_node": "p_end", "label": "Ratified"},
+                        ],
+                    )
+
+                    proc_ocr = DocumentProcessDefinition.objects.create(
+                        tenant=tenant,
+                        name="OCR Auto-Classification & Quarantine Triage",
+                        code="DBPM-OCR-TRIAGE",
+                        description="Draft pipeline with automated OCR tagging, confidence hold timer, and fallback manual queue.",
+                        process_category="ocr_classification",
+                        trigger_event="ocr_completed",
+                        target_document_type="all",
+                        department=ou_0,
+                        owner=user,
+                        version_number=2,
+                        status="draft",
+                        is_active=True,
+                        sla_target_hours=24,
+                        swimlanes_json=[
+                            {"id": "lane_ops", "name": "Capture Operations", "role": "OCR Operator"},
+                        ],
+                        nodes_json=[
+                            {"id": "o_start", "type": "start_event", "label": "OCR Job Finished", "lane_id": "lane_ops"},
+                            {"id": "o_cls", "type": "service_task", "label": "Apply Auto-Taxonomy", "lane_id": "lane_ops"},
+                            {"id": "o_tmr", "type": "timer_event", "label": "4h Spot-Check Window", "lane_id": "lane_ops"},
+                            {"id": "o_end", "type": "end_event", "label": "Indexed in Repository", "lane_id": "lane_ops"},
+                        ],
+                        transitions_json=[
+                            {"from_node": "o_start", "to_node": "o_cls", "label": "Classify"},
+                            {"from_node": "o_cls", "to_node": "o_tmr", "label": "Hold"},
+                            {"from_node": "o_tmr", "to_node": "o_end", "label": "Release"},
+                        ],
+                    )
+
+                    rule_contract = DocumentRoutingRule.objects.create(
+                        tenant=tenant,
+                        name="Contract Intake -> Launch BPM Pipeline",
+                        description="Automatically files newly uploaded contracts, stamps intake tags, and starts the Contract Intake BPM process.",
+                        process_definition=proc_contract,
+                        core_rule_ref=core_rule,
+                        rule_type="routing_distribution",
+                        trigger_event="on_upload",
+                        priority=10,
+                        target_document_type="contract",
+                        condition_logic_mode="all_and",
+                        conditions_json=[
+                            {"source": "document", "field": "document_type", "op": "eq", "value": "contract"},
+                        ],
+                        auto_populate_json={
+                            "document_fields": {"tags": "contract-intake, bpm-automated"},
+                            "metadata_fields": {"bpm_route_tier": "Executive Legal Review"},
+                        },
+                        route_action="trigger_process",
+                        destination_folder=folder_0,
+                        route_to_org_unit=ou_0,
+                        route_to_user=user,
+                        is_active=True,
+                        owner=user,
+                        execution_count=14,
+                        match_count=11,
+                        last_evaluated_at=now - timezone.timedelta(hours=3),
+                    )
+
+                    rule_validation = DocumentRoutingRule.objects.create(
+                        tenant=tenant,
+                        name="Confidential Classification Metadata Gate",
+                        description="Validates confidential documents before compliance signoff and falls back to role queue when unmatched.",
+                        process_definition=proc_policy,
+                        rule_type="data_validation",
+                        trigger_event="on_metadata_change",
+                        priority=20,
+                        target_classification="confidential",
+                        condition_logic_mode="all_and",
+                        conditions_json=[
+                            {"source": "document", "field": "classification", "op": "eq", "value": "confidential"},
+                        ],
+                        validation_rules_json=[
+                            {
+                                "check": "required_metadata",
+                                "field": "retention_code",
+                                "message": "Confidential documents require a retention_code metadata value.",
+                            }
+                        ],
+                        auto_populate_json={
+                            "metadata_fields": {"compliance_gate": "Verified"},
+                        },
+                        else_branch_enabled=True,
+                        else_action_json={
+                            "route_action": "assign_role",
+                            "metadata_fields": {"review_queue": "Standard Triage"},
+                        },
+                        route_action="populate_metadata",
+                        route_to_role=role_0,
+                        is_active=True,
+                        owner=user,
+                        execution_count=9,
+                        match_count=7,
+                        last_evaluated_at=now - timezone.timedelta(days=1),
+                    )
+
+                    DocumentRoutingRule.objects.create(
+                        tenant=tenant,
+                        name="High-Confidence OCR Folder Distribution",
+                        description="Routes OCR-processed invoices above 0.80 confidence into repository folders and assigns custodian.",
+                        rule_type="conditional_branch",
+                        trigger_event="on_ocr_complete",
+                        priority=30,
+                        target_document_type="invoice",
+                        condition_logic_mode="all_and",
+                        conditions_json=[
+                            {"source": "ocr", "field": "confidence_score", "op": "gte", "value": "0.80"},
+                        ],
+                        route_action="move_to_folder",
+                        destination_folder=folder_1,
+                        route_to_user=user,
+                        is_active=True,
+                        owner=user,
+                        execution_count=22,
+                        match_count=19,
+                        last_evaluated_at=now - timezone.timedelta(hours=1),
+                    )
+
+                    wh_contract = DocumentWebhookTrigger(
+                        tenant=tenant,
+                        name="ERP Contract Execution Event Stream",
+                        description="Emits CloudEvents 1.0 HMAC-SHA256 signed envelopes whenever a contract BPM process completes.",
+                        direction="outbound_webhook",
+                        trigger_event="process.completed",
+                        process_definition=proc_contract,
+                        connector_ref=core_conn,
+                        target_url="https://hooks.partner-erp.example/v1/dms/contract-completed",
+                        http_method="post",
+                        payload_format="cloudevents_json",
+                        custom_headers={"X-NavERP-Channel": "dms-bpm"},
+                        payload_template_json={"system": "NavERP-DMS", "module": "13.11"},
+                        filter_document_type="contract",
+                        retry_policy_max=5,
+                        is_active=True,
+                        owner=user,
+                        last_status="simulated",
+                        last_fired_at=now - timezone.timedelta(hours=2),
+                        fire_count=6,
+                        failure_count=0,
+                        delivery_history_json=[
+                            {
+                                "event": "process.completed",
+                                "timestamp": (now - timezone.timedelta(hours=2)).isoformat(),
+                                "status": "simulated",
+                                "signature_header": "sha256=demo_seeded_digest",
+                                "payload": {"specversion": "1.0", "type": "com.naverp.documents.process.completed"},
+                            }
+                        ],
+                    )
+                    wh_contract.generate_signing_secret()
+                    wh_contract.save()
+
+                    wh_policy = DocumentWebhookTrigger(
+                        tenant=tenant,
+                        name="Compliance Policy Status Callback",
+                        description="Middleware callback subscription monitoring regulatory policy lifecycle state changes.",
+                        direction="middleware_callback",
+                        trigger_event="document.status_changed",
+                        process_definition=proc_policy,
+                        target_url="https://middleware.partner-erp.example/callbacks/policy-status",
+                        http_method="put",
+                        payload_format="json",
+                        custom_headers={"X-Compliance-Feed": "policy-audit"},
+                        retry_policy_max=3,
+                        is_active=True,
+                        owner=user,
+                        last_status="never_fired",
+                    )
+                    wh_policy.generate_signing_secret()
+                    wh_policy.save()
+
+                    wh_inbound = DocumentWebhookTrigger(
+                        tenant=tenant,
+                        name="External Capture Inbound Webhook",
+                        description="Inbound endpoint trigger accepting signed partner capture events to initiate OCR triage.",
+                        direction="inbound_webhook",
+                        trigger_event="inbound.trigger",
+                        process_definition=proc_ocr,
+                        http_method="post",
+                        payload_format="json",
+                        retry_policy_max=3,
+                        is_active=True,
+                        owner=user,
+                        last_status="simulated",
+                        last_fired_at=now - timezone.timedelta(days=1),
+                        fire_count=3,
+                    )
+                    wh_inbound.generate_signing_secret()
+                    wh_inbound.save()
+
+                    if docs_list:
+                        doc0 = docs_list[0]
+                        doc1 = docs_list[1] if len(docs_list) > 1 else doc0
+                        doc2 = docs_list[2] if len(docs_list) > 2 else doc0
+                        doc3 = docs_list[3] if len(docs_list) > 3 else doc1
+
+                        DocumentProcessInstance.objects.create(
+                            tenant=tenant,
+                            process_definition=proc_contract,
+                            document=doc0,
+                            triggered_by_rule=rule_contract,
+                            approval_workflow=existing_approval_wf,
+                            department=ou_0,
+                            initiated_by=user,
+                            current_assignee=user,
+                            status="completed",
+                            current_node_id="n_end",
+                            current_node_label="Contract Executed & Archived",
+                            started_at=now - timezone.timedelta(hours=30),
+                            due_at=now + timezone.timedelta(hours=18),
+                            completed_at=now - timezone.timedelta(hours=12),
+                            cycle_time_minutes=1080,
+                            rework_count=0,
+                            is_sla_breached=False,
+                            is_conformant=True,
+                            variant_signature="n_start -> n_ocr -> n_gw -> n_legal -> n_whk -> n_end",
+                            step_trace_json=[
+                                {"node_id": "n_start", "node_type": "start_event", "label": "Contract Received", "lane": "lane_intake", "entered_at": (now - timezone.timedelta(hours=30)).isoformat(), "exited_at": (now - timezone.timedelta(hours=30)).isoformat(), "duration_minutes": 0, "outcome": "started", "actor": user.username},
+                                {"node_id": "n_ocr", "node_type": "service_task", "label": "OCR & Clause Extraction", "lane": "lane_intake", "entered_at": (now - timezone.timedelta(hours=30)).isoformat(), "exited_at": (now - timezone.timedelta(hours=29)).isoformat(), "duration_minutes": 60, "outcome": "completed", "actor": "system"},
+                                {"node_id": "n_gw", "node_type": "exclusive_gateway", "label": "High Risk / Confidential?", "lane": "lane_legal", "entered_at": (now - timezone.timedelta(hours=29)).isoformat(), "exited_at": (now - timezone.timedelta(hours=28)).isoformat(), "duration_minutes": 60, "outcome": "high_risk", "actor": user.username},
+                                {"node_id": "n_legal", "node_type": "approval_subprocess", "label": "Legal & CFO Approval", "lane": "lane_exec", "entered_at": (now - timezone.timedelta(hours=28)).isoformat(), "exited_at": (now - timezone.timedelta(hours=13)).isoformat(), "duration_minutes": 900, "outcome": "approved", "actor": user.username},
+                                {"node_id": "n_whk", "node_type": "webhook_task", "label": "Notify ERP Downstream", "lane": "lane_exec", "entered_at": (now - timezone.timedelta(hours=13)).isoformat(), "exited_at": (now - timezone.timedelta(hours=12)).isoformat(), "duration_minutes": 60, "outcome": "simulated", "actor": "system"},
+                                {"node_id": "n_end", "node_type": "end_event", "label": "Contract Executed & Archived", "lane": "lane_exec", "entered_at": (now - timezone.timedelta(hours=12)).isoformat(), "exited_at": (now - timezone.timedelta(hours=12)).isoformat(), "duration_minutes": 0, "outcome": "completed", "actor": user.username},
+                            ],
+                            context_variables_json={"contract_tier": "Tier-1", "auto_routed": True},
+                        )
+
+                        DocumentProcessInstance.objects.create(
+                            tenant=tenant,
+                            process_definition=proc_contract,
+                            document=doc1,
+                            triggered_by_rule=rule_contract,
+                            department=ou_0,
+                            initiated_by=user,
+                            current_assignee=user,
+                            status="completed",
+                            current_node_id="n_end",
+                            current_node_label="Contract Executed & Archived",
+                            started_at=now - timezone.timedelta(hours=90),
+                            due_at=now - timezone.timedelta(hours=42),
+                            completed_at=now - timezone.timedelta(hours=20),
+                            cycle_time_minutes=4200,
+                            rework_count=2,
+                            is_sla_breached=True,
+                            is_conformant=False,
+                            variant_signature="n_start -> n_ocr -> n_gw -> n_legal -> n_gw -> n_legal -> n_end",
+                            step_trace_json=[
+                                {"node_id": "n_start", "node_type": "start_event", "label": "Contract Received", "lane": "lane_intake", "entered_at": (now - timezone.timedelta(hours=90)).isoformat(), "exited_at": (now - timezone.timedelta(hours=90)).isoformat(), "duration_minutes": 0, "outcome": "started", "actor": user.username},
+                                {"node_id": "n_legal", "node_type": "approval_subprocess", "label": "Legal & CFO Approval", "lane": "lane_exec", "entered_at": (now - timezone.timedelta(hours=88)).isoformat(), "exited_at": (now - timezone.timedelta(hours=20)).isoformat(), "duration_minutes": 4080, "outcome": "returned_then_approved", "actor": user.username},
+                                {"node_id": "n_end", "node_type": "end_event", "label": "Contract Executed & Archived", "lane": "lane_exec", "entered_at": (now - timezone.timedelta(hours=20)).isoformat(), "exited_at": (now - timezone.timedelta(hours=20)).isoformat(), "duration_minutes": 0, "outcome": "completed", "actor": user.username},
+                            ],
+                            context_variables_json={"rework_reason": "Updated indemnity clause"},
+                        )
+
+                        DocumentProcessInstance.objects.create(
+                            tenant=tenant,
+                            process_definition=proc_contract,
+                            document=doc2,
+                            triggered_by_rule=rule_contract,
+                            department=ou_0,
+                            initiated_by=user,
+                            current_assignee=user,
+                            status="waiting_approval",
+                            current_node_id="n_legal",
+                            current_node_label="Legal & CFO Approval",
+                            started_at=now - timezone.timedelta(hours=10),
+                            due_at=now + timezone.timedelta(hours=38),
+                            variant_signature="n_start -> n_ocr -> n_gw -> n_legal",
+                            step_trace_json=[
+                                {"node_id": "n_start", "node_type": "start_event", "label": "Contract Received", "lane": "lane_intake", "entered_at": (now - timezone.timedelta(hours=10)).isoformat(), "exited_at": (now - timezone.timedelta(hours=10)).isoformat(), "duration_minutes": 0, "outcome": "started", "actor": user.username},
+                                {"node_id": "n_ocr", "node_type": "service_task", "label": "OCR & Clause Extraction", "lane": "lane_intake", "entered_at": (now - timezone.timedelta(hours=10)).isoformat(), "exited_at": (now - timezone.timedelta(hours=9)).isoformat(), "duration_minutes": 45, "outcome": "completed", "actor": "system"},
+                                {"node_id": "n_legal", "node_type": "approval_subprocess", "label": "Legal & CFO Approval", "lane": "lane_exec", "entered_at": (now - timezone.timedelta(hours=9)).isoformat(), "exited_at": None, "duration_minutes": 540, "outcome": "pending", "actor": user.username},
+                            ],
+                        )
+
+                        DocumentProcessInstance.objects.create(
+                            tenant=tenant,
+                            process_definition=proc_policy,
+                            document=doc3,
+                            triggered_by_rule=rule_validation,
+                            department=ou_1,
+                            initiated_by=user,
+                            current_assignee=user,
+                            status="running",
+                            current_node_id="p_rev",
+                            current_node_label="Compliance Clause Review",
+                            started_at=now - timezone.timedelta(hours=4),
+                            due_at=now + timezone.timedelta(hours=68),
+                            variant_signature="p_start -> p_rev",
+                            step_trace_json=[
+                                {"node_id": "p_start", "node_type": "start_event", "label": "Policy Draft Submitted", "lane": "lane_comp", "entered_at": (now - timezone.timedelta(hours=4)).isoformat(), "exited_at": (now - timezone.timedelta(hours=4)).isoformat(), "duration_minutes": 0, "outcome": "started", "actor": user.username},
+                                {"node_id": "p_rev", "node_type": "user_task", "label": "Compliance Clause Review", "lane": "lane_comp", "entered_at": (now - timezone.timedelta(hours=4)).isoformat(), "exited_at": None, "duration_minutes": 240, "outcome": "pending", "actor": user.username},
+                            ],
+                        )
+
+                        DocumentProcessDefinition.objects.filter(pk=proc_contract.pk).update(instance_count=3)
+                        DocumentProcessDefinition.objects.filter(pk=proc_policy.pk).update(instance_count=1)
 
                 self.stdout.write(self.style.SUCCESS(f"Successfully processed Document Management seeding for '{tenant.slug}'."))
 
