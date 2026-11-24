@@ -17,8 +17,8 @@
 |---|---|---|---|---|
 | **Critical** | 5 | 0 | 5 | 0 |
 | **Important** | 9 | 0 | 9 | 0 |
-| **Minor** | 4 | 4 | 0 | 0 |
-| **Total** | 18 | 4 | 14 | 0 |
+| **Minor** | 4 | 3 | 1 | 0 |
+| **Total** | 18 | 3 | 15 | 0 |
 
 ---
 
@@ -175,7 +175,7 @@
 
 ## Minor Findings (M1 – M4)
 
-### [ ] `M1`: Duplicate Word Typo in Destruction Certificate Detail
+### [x] `M1`: Duplicate Word Typo in Destruction Certificate Detail
 - **Found by**: `code-reviewer`, `explorer`, `qa-smoke-tester`
 - **Location**: `templates/documents/records_management/destruction_certificate/detail.html:163`
 - **Issue**: Renders `<span>Authorization Authorization</span>`.
