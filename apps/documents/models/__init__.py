@@ -8,6 +8,10 @@ from apps.documents.models.ApprovalWorkflow.DocumentReviewComments import (
     DocumentReviewComment,
 )
 from apps.documents.models.ApprovalWorkflow.DocumentSignatures import DocumentSignature
+from apps.documents.models.AuditReporting.AuditReportDefinitions import AuditReportDefinition
+from apps.documents.models.AuditReporting.ChainOfCustodyExports import ChainOfCustodyExport
+from apps.documents.models.AuditReporting.DocumentAuditTrails import DocumentAuditTrail
+from apps.documents.models.AuditReporting.DocumentSecurityAlerts import DocumentSecurityAlert
 from apps.documents.models.CollaborationSharing.CoauthorSessions import CoauthorSession
 from apps.documents.models.CollaborationSharing.DocumentActivities import DocumentActivity
 from apps.documents.models.CollaborationSharing.DocumentShares import DocumentShare
@@ -84,4 +88,8 @@ __all__ = [
     "RecordDeclaration",
     "DocumentLegalHold",
     "DestructionCertificate",
+    "DocumentAuditTrail",
+    "AuditReportDefinition",
+    "DocumentSecurityAlert",
+    "ChainOfCustodyExport",
 ]
