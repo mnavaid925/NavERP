@@ -1,3 +1,4 @@
+import calendar
 import datetime
 from django.conf import settings
 from django.db import models
@@ -115,8 +116,9 @@ class RecordDeclaration(TenantNumbered):
         # Calculate new year and month
         new_year = start_date.year + (start_date.month + total_months - 1) // 12
         new_month = (start_date.month + total_months - 1) % 12 + 1
-        # Handle end of month boundary
-        day = min(start_date.day, 28)
+        # Handle end of month boundary with actual month length preservation
+        max_days = calendar.monthrange(new_year, new_month)[1]
+        day = min(start_date.day, max_days)
         return datetime.date(new_year, new_month, day)
 
     def trigger_cutoff(self):
