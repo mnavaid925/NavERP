@@ -5,6 +5,7 @@ from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
+from apps.core.decorators import tenant_admin_required
 from apps.core.utils import write_audit_log
 from apps.documents.forms.RecordsManagement.DocumentLegalHolds import DocumentLegalHoldForm, LegalHoldReleaseForm
 from apps.documents.models.RecordsManagement.DocumentLegalHolds import DocumentLegalHold
@@ -101,6 +102,7 @@ def legal_hold_create(request):
 
 
 @login_required
+@tenant_admin_required
 @require_POST
 def legal_hold_release(request, pk):
     hold = documents_object(request, DocumentLegalHold, pk)
