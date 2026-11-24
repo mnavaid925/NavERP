@@ -117,9 +117,14 @@ class DestructionCertificate(TenantNumbered):
             has_active_holds = self.record_declaration.document.legal_holds.filter(is_active=True).exists()
             self.legal_hold_verified_clear = not has_active_holds
             self.hold_verification_date = timezone.now()
-            self.save(update_fields=["legal_hold_verified_clear", "hold_verification_date", "updated_at"])
+            if self.pk:
+                self.save(update_fields=["legal_hold_verified_clear", "hold_verification_date", "updated_at"])
             return self.legal_hold_verified_clear
-        return False
+        self.legal_hold_verified_clear = True
+        self.hold_verification_date = timezone.now()
+        if self.pk:
+            self.save(update_fields=["legal_hold_verified_clear", "hold_verification_date", "updated_at"])
+        return True
 
     def authorize(self, user):
         if not self.verify_legal_holds():
