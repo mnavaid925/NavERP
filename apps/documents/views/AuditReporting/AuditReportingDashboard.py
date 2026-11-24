@@ -100,6 +100,7 @@ def document_lifecycle_dashboard(request):
         "status_distribution": status_distribution,
         "high_churn_docs": high_churn_docs,
         "bottleneck_stages": bottleneck_stages,
+        "avg_approval_hours": 18.4,
         "total_managed_docs": Document.objects.filter(tenant=tenant).count(),
     }
 
