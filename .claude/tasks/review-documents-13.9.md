@@ -17,8 +17,8 @@
 |---|---|---|---|---|
 | **Critical** | 5 | 0 | 5 | 0 |
 | **Important** | 9 | 0 | 9 | 0 |
-| **Minor** | 4 | 3 | 1 | 0 |
-| **Total** | 18 | 3 | 15 | 0 |
+| **Minor** | 4 | 2 | 2 | 0 |
+| **Total** | 18 | 2 | 16 | 0 |
 
 ---
 
@@ -181,7 +181,7 @@
 - **Issue**: Renders `<span>Authorization Authorization</span>`.
 - **Fix**: Change to `<span>Disposition Authorization</span>`.
 
-### [ ] `M2`: Seeder Sub-module 13.10 Indentation Bug
+### [x] `M2`: Seeder Sub-module 13.10 Indentation Bug
 - **Found by**: `code-reviewer`, `explorer`
 - **Location**: `apps/documents/management/commands/seed_documents.py:642`
 - **Issue**: Sub-module 13.10 block was indented under 13.9's Acme tenant loop instead of running for all tenants.
