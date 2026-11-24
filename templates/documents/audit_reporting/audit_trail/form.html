@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Search & Query Audit Trail — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:audit_dashboard' %}">Audit & Reporting</a>
+            <span>/</span>
+            <a href="{% url 'documents:audit_trail_list' %}">Audit Trail</a>
+            <span>/</span>
+            <span>Query Console</span>
+        </div>
+        <h1 class="page-title">Advanced Audit Trail Query Console</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:audit_trail_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Back to Trail</span>
+        </a>
+    </div>
+</div>
+
+<div class="max-w-3xl mx-auto">
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">Forensic Search Parameters</h2>
+        </div>
+        <div class="card-body">
+            <div class="mb-4 p-3 bg-blue-50 border border-blue-200 rounded text-xs text-blue-800">
+                <i data-lucide="info" class="w-4 h-4 inline-block mr-1 -mt-0.5"></i>
+                Audit trail entries are strictly immutable write-once records generated automatically by system operations. Use this console to filter and export targeted forensic subsets.
+            </div>
+
+            <form method="get" action="{% url 'documents:audit_trail_list' %}" class="space-y-4">
+                <div class="form-group">
+                    <label class="form-label" for="id_q">Keywords</label>
+                    <input type="text" name="q" id="id_q" class="form-input w-full" placeholder="Search keywords across documents, actors, IPs, or action parameters...">
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label class="form-label" for="id_action_type">Action Category</label>
+                        <select name="action_type" id="id_action_type" class="form-select w-full">
+                            <option value="">All Action Types</option>
+                            {% for val, label in action_type_choices %}
+                            <option value="{{ val }}">{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="id_is_success">Execution Outcome</label>
+                        <select name="is_success" id="id_is_success" class="form-select w-full">
+                            <option value="">All Results</option>
+                            <option value="1">Success Only</option>
+                            <option value="0">Failed / Security Blocks Only</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label class="form-label" for="id_date_from">Date From</label>
+                        <input type="date" name="date_from" id="id_date_from" class="form-input w-full">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="id_date_to">Date To</label>
+                        <input type="date" name="date_to" id="id_date_to" class="form-input w-full">
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                    <a href="{% url 'documents:audit_trail_list' %}" class="btn btn-outline">Cancel</a>
+                    <button type="submit" class="btn btn-primary">
+                        <i data-lucide="search"></i>
+                        <span>Execute Query</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
