@@ -99,7 +99,7 @@
                         <dt>Version Reference</dt>
                         <dd>
                             {% if audit_entry.version %}
-                            <span class="badge badge-info font-mono">v{{ audit_entry.version.version_number }}</span>
+                            <span class="badge badge-info font-mono">{{ audit_entry.version.version_label|default:audit_entry.version.number }}</span>
                             {% else %}
                             <span class="text-slate-400">—</span>
                             {% endif %}
