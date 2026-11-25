@@ -194,18 +194,19 @@ def process_instance_create(request):
         form = DocumentProcessInstanceForm(request.POST, tenant=request.tenant)
         if form.is_valid():
             cd = form.cleaned_data
-            instance = start_process_instance(
-                tenant=request.tenant,
-                process_definition=cd["process_definition"],
-                document=cd["document"],
-                actor=request.user,
-                version=cd.get("version"),
-                department=cd.get("department"),
-                assignee=cd.get("current_assignee"),
-                context_variables=cd.get("context_variables_json") or {},
-                request=request,
-            )
-            write_audit_log(request.user, instance, "create", tenant=request.tenant)
+            with transaction.atomic():
+                instance = start_process_instance(
+                    tenant=request.tenant,
+                    process_definition=cd["process_definition"],
+                    document=cd["document"],
+                    actor=request.user,
+                    version=cd.get("version"),
+                    department=cd.get("department"),
+                    assignee=cd.get("current_assignee"),
+                    context_variables=cd.get("context_variables_json") or {},
+                    request=request,
+                )
+                write_audit_log(request.user, instance, "create", tenant=request.tenant)
             messages.success(request, f"Process instance {instance.number} launched.")
             return redirect("documents:process_instance_detail", pk=instance.pk)
     else:
