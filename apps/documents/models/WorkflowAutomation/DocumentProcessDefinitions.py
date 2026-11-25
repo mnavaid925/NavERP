@@ -149,9 +149,9 @@ class DocumentProcessDefinition(TenantNumbered):
         super().clean()
         if self.code:
             self.code = self.code.strip().upper()
-        if self.sla_target_hours < 1:
+        if self.sla_target_hours is not None and self.sla_target_hours < 1:
             raise ValidationError({"sla_target_hours": "SLA target hours must be at least 1."})
-        if self.version_number < 1:
+        if self.version_number is not None and self.version_number < 1:
             raise ValidationError({"version_number": "Version number must be at least 1."})
 
     def save(self, *args, **kwargs):
