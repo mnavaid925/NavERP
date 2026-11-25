@@ -211,9 +211,18 @@ class DocumentRoutingRule(TenantNumbered):
         return f"{self.number} — {self.name} (P{self.priority})"
 
     def clean(self):
+        from apps.documents.services.workflow_automation import validate_routing_rule_config
+
         super().clean()
-        if self.priority < 1:
+        if self.priority is not None and self.priority < 1:
             raise ValidationError({"priority": "Rule priority must be >= 1."})
+        validate_routing_rule_config(
+            self.conditions_json,
+            self.validation_rules_json,
+            route_action=self.route_action,
+            else_branch_enabled=self.else_branch_enabled,
+            else_action=self.else_action_json,
+        )
 
     @property
     def rule_type_badge(self):
