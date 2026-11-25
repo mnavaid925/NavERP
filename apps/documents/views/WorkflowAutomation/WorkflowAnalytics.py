@@ -7,17 +7,14 @@ from apps.documents.models.WorkflowAutomation.DocumentProcessDefinitions import 
     DocumentProcessDefinition,
 )
 from apps.documents.services.workflow_automation import compute_process_analytics
-from apps.documents.views._common import safe_parse_date
+from apps.documents.views._common import parse_int_param, safe_parse_date
 
 
 @login_required
 def process_analytics_dashboard(request):
     """Process performance analytics: cycle times, throughput, bottlenecks, and process mining."""
-    proc_id_raw = request.GET.get("process_definition", "").strip()
-    selected_process_id = proc_id_raw if proc_id_raw.isdigit() else ""
-
-    dept_id_raw = request.GET.get("department", "").strip()
-    selected_department_id = dept_id_raw if dept_id_raw.isdigit() else ""
+    selected_process_id, proc_int_id = parse_int_param(request.GET.get("process_definition"))
+    selected_department_id, dept_int_id = parse_int_param(request.GET.get("department"))
 
     date_from_str = request.GET.get("date_from", "").strip()
     date_to_str = request.GET.get("date_to", "").strip()
@@ -32,8 +29,8 @@ def process_analytics_dashboard(request):
 
     analytics = compute_process_analytics(
         tenant=request.tenant,
-        process_def_id=selected_process_id or None,
-        department_id=selected_department_id or None,
+        process_def_id=proc_int_id,
+        department_id=dept_int_id,
         date_from=date_from,
         date_to=date_to,
     )
