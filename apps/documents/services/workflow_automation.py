@@ -692,6 +692,12 @@ def _apply_auto_populate(tenant, document, auto_populate, actor=None):
     return changes
 
 
+def _assert_same_tenant(tenant, obj, label):
+    """Ensure every bound domain object belongs to the caller's tenant before mutation."""
+    if obj is not None and getattr(obj, "tenant_id", None) != tenant.id:
+        raise ValidationError(f"{label} does not belong to workspace '{tenant}'.")
+
+
 def evaluate_routing_rules(
     tenant,
     document,
@@ -706,6 +712,11 @@ def evaluate_routing_rules(
     from apps.documents.models.CollaborationSharing.DocumentTasks import DocumentTask
     from apps.documents.models.WorkflowAutomation.DocumentRoutingRules import DocumentRoutingRule
     from apps.documents.services.audit import log_document_event
+
+    _assert_same_tenant(tenant, document, "Document")
+    if rules is not None:
+        for rule_obj in rules:
+            _assert_same_tenant(tenant, rule_obj, "Routing rule")
 
     if rules is None:
         qs = DocumentRoutingRule.objects.filter(tenant=tenant, is_active=True).select_related(
@@ -725,6 +736,16 @@ def evaluate_routing_rules(
     results = []
 
     for rule in rules:
+        _assert_same_tenant(tenant, rule, "Routing rule")
+        for fk_field, fk_label in (
+            ("process_definition", "Target process definition"),
+            ("source_folder", "Source folder"),
+            ("destination_folder", "Destination folder"),
+            ("route_to_org_unit", "Route org unit"),
+            ("route_to_role", "Route role"),
+            ("route_to_user", "Route user"),
+        ):
+            _assert_same_tenant(tenant, getattr(rule, fk_field, None), fk_label)
         # Scope checks
         scope_ok = True
         scope_reasons = []
@@ -956,6 +977,15 @@ def start_process_instance(
     from apps.documents.models.WorkflowAutomation.DocumentProcessDefinitions import DocumentProcessDefinition
     from apps.documents.models.WorkflowAutomation.DocumentProcessInstances import DocumentProcessInstance
     from apps.documents.services.audit import log_document_event
+
+    _assert_same_tenant(tenant, process_definition, "Process definition")
+    _assert_same_tenant(tenant, document, "Document")
+    _assert_same_tenant(tenant, version, "Document version")
+    _assert_same_tenant(tenant, department, "Department")
+    _assert_same_tenant(tenant, assignee, "Assignee")
+    _assert_same_tenant(tenant, triggered_by_rule, "Triggering routing rule")
+    if version is not None and version.document_id != document.id:
+        raise ValidationError("Selected document version does not belong to the target document.")
 
     if process_definition.status != "published" or not process_definition.is_active:
         raise ValidationError(
