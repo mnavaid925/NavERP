@@ -15,7 +15,7 @@
         </div>
         <h1 class="page-title">Business Process Definitions</h1>
     </div>
-    <div class="page-actions">
+    <div class="page-actions flex-wrap">
         <a href="{% url 'documents:process_analytics_dashboard' %}" class="btn btn-outline">
             <i data-lucide="bar-chart-3"></i>
             <span>Process Analytics</span>
@@ -64,12 +64,12 @@
 
 <div class="card mb-6">
     <div class="card-body">
-        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
-            <div class="form-group">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 items-end">
+            <div class="form-group mb-0">
                 <label class="form-label" for="id_q">Search</label>
                 <input type="text" id="id_q" name="q" value="{{ q }}" placeholder="Code, name, DBPM-..." class="form-input w-full">
             </div>
-            <div class="form-group">
+            <div class="form-group mb-0">
                 <label class="form-label" for="id_status">Status</label>
                 <select id="id_status" name="status" class="form-select w-full">
                     <option value="">All Statuses</option>
@@ -78,7 +78,7 @@
                     {% endfor %}
                 </select>
             </div>
-            <div class="form-group">
+            <div class="form-group mb-0">
                 <label class="form-label" for="id_category">Category</label>
                 <select id="id_category" name="category" class="form-select w-full">
                     <option value="">All Categories</option>
@@ -87,7 +87,7 @@
                     {% endfor %}
                 </select>
             </div>
-            <div class="form-group">
+            <div class="form-group mb-0">
                 <label class="form-label" for="id_trigger_event">Trigger</label>
                 <select id="id_trigger_event" name="trigger_event" class="form-select w-full">
                     <option value="">All Triggers</option>
@@ -96,7 +96,7 @@
                     {% endfor %}
                 </select>
             </div>
-            <div class="form-group">
+            <div class="form-group mb-0">
                 <label class="form-label" for="id_department">Department</label>
                 <select id="id_department" name="department" class="form-select w-full">
                     <option value="">All Departments</option>
@@ -130,7 +130,7 @@
                     <th>SLA Target</th>
                     <th>Runs</th>
                     <th>Status</th>
-                    <th class="text-right">Actions</th>
+                    <th class="text-end">Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -159,30 +159,32 @@
                     <td>
                         <span class="badge {{ proc.status_badge }}">{{ proc.get_status_display }}</span>
                     </td>
-                    <td class="table-actions text-right">
-                        <a href="{% url 'documents:process_definition_detail' proc.pk %}" class="btn btn-icon" title="View Blueprint" aria-label="View {{ proc.number }}">
-                            <i data-lucide="eye"></i>
-                        </a>
-                        <a href="{% url 'documents:process_definition_designer' proc.pk %}" class="btn btn-icon" title="Visual Designer" aria-label="Design {{ proc.number }}">
-                            <i data-lucide="workflow"></i>
-                        </a>
-                        {% if proc.status != 'archived' %}
-                        {% if proc.status != 'published' or user.is_superuser or user.is_tenant_admin %}
-                        <a href="{% url 'documents:process_definition_edit' proc.pk %}" class="btn btn-icon" title="Edit Blueprint" aria-label="Edit {{ proc.number }}">
-                            <i data-lucide="pencil"></i>
-                        </a>
-                        {% endif %}
-                        {% endif %}
-                        {% if proc.status == 'draft' %}
-                        {% if user.is_superuser or user.is_tenant_admin %}
-                        <form method="post" action="{% url 'documents:process_definition_delete' proc.pk %}" class="inline" onsubmit="return confirm('Delete process definition {{ proc.number }}?');">
-                            {% csrf_token %}
-                            <button type="submit" class="btn btn-icon danger" title="Delete Blueprint" aria-label="Delete {{ proc.number }}">
-                                <i data-lucide="trash-2"></i>
-                            </button>
-                        </form>
-                        {% endif %}
-                        {% endif %}
+                    <td class="text-end">
+                        <div class="table-actions">
+                            <a href="{% url 'documents:process_definition_detail' proc.pk %}" class="btn btn-icon" title="View Blueprint" aria-label="View {{ proc.number }}">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'documents:process_definition_designer' proc.pk %}" class="btn btn-icon" title="Visual Designer" aria-label="Design {{ proc.number }}">
+                                <i data-lucide="workflow"></i>
+                            </a>
+                            {% if proc.status != 'archived' %}
+                            {% if proc.status != 'published' or user.is_superuser or user.is_tenant_admin %}
+                            <a href="{% url 'documents:process_definition_edit' proc.pk %}" class="btn btn-icon" title="Edit Blueprint" aria-label="Edit {{ proc.number }}">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            {% endif %}
+                            {% endif %}
+                            {% if proc.status == 'draft' and proc.instance_count == 0 %}
+                            {% if user.is_superuser or user.is_tenant_admin %}
+                            <form method="post" action="{% url 'documents:process_definition_delete' proc.pk %}" class="inline" onsubmit="return confirm('Delete process definition {{ proc.number }}?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon danger" title="Delete Blueprint" aria-label="Delete {{ proc.number }}">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                            {% endif %}
+                            {% endif %}
+                        </div>
                     </td>
                 </tr>
                 {% empty %}
@@ -202,7 +204,7 @@
     </div>
     {% if page_obj.has_other_pages %}
     <div class="pagination">
-        <span class="text-xs text-slate-500">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+        <span class="muted">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
         <div class="flex items-center gap-2">
             {% if page_obj.has_previous %}
             <a href="?page={{ page_obj.previous_page_number }}&q={{ q|urlencode }}&status={{ status|urlencode }}&category={{ category|urlencode }}&trigger_event={{ trigger_event|urlencode }}&department={{ department|urlencode }}" class="btn btn-outline btn-sm">Previous</a>
