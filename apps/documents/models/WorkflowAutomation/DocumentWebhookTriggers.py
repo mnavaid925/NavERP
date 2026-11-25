@@ -221,16 +221,28 @@ class DocumentWebhookTrigger(TenantNumbered):
             "target_url": self.target_url,
             "payload": payload_dict,
         }
-        history = list(self.delivery_history_json or [])
-        history.append(entry)
-        history = history[-25:]
         with transaction.atomic():
-            self.last_status = "simulated"
-            self.last_fired_at = now
-            self.delivery_history_json = history
-            self.save(update_fields=["last_status", "last_fired_at", "delivery_history_json", "updated_at"])
-            DocumentWebhookTrigger.objects.filter(pk=self.pk).update(fire_count=F("fire_count") + 1)
-            self.refresh_from_db(fields=["fire_count"])
+            locked = DocumentWebhookTrigger.objects.select_for_update().get(pk=self.pk)
+            history = list(locked.delivery_history_json or [])
+            history.append(entry)
+            history = history[-25:]
+            locked.last_status = "simulated"
+            locked.last_fired_at = now
+            locked.delivery_history_json = history
+            locked.fire_count = (locked.fire_count or 0) + 1
+            locked.save(
+                update_fields=[
+                    "last_status",
+                    "last_fired_at",
+                    "delivery_history_json",
+                    "fire_count",
+                    "updated_at",
+                ]
+            )
+            self.last_status = locked.last_status
+            self.last_fired_at = locked.last_fired_at
+            self.delivery_history_json = locked.delivery_history_json
+            self.fire_count = locked.fire_count
         return entry
 
     @property
