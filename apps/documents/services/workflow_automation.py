@@ -1082,6 +1082,12 @@ def evaluate_routing_rules(
         rules = list(qs.order_by("priority", "pk"))
 
     doc_ctx = build_document_context(tenant, document)
+    doc_mutation_blocked = False
+    if apply_mutations:
+        doc_mutation_blocked = (
+            document.legal_holds.filter(is_active=True).exists()
+            or document.record_declarations.filter(is_locked=True).exists()
+        )
     User = get_user_model()
     results = []
     unmatched_rule_ids = []
@@ -1174,6 +1180,11 @@ def evaluate_routing_rules(
                     f"Validation gate rule {rule.number} has no checks configured in validation_rules_json."
                 )
 
+        if apply_mutations and doc_mutation_blocked and scope_ok and cond_matched:
+            validation_errors.append(
+                "Document is protected by an active legal hold or locked record declaration."
+            )
+
         used_else = False
         effective_action = None
         if scope_ok and cond_matched and not validation_errors:
@@ -1181,7 +1192,9 @@ def evaluate_routing_rules(
         elif scope_ok and not cond_matched and rule.else_branch_enabled:
             used_else = True
             else_cfg = rule.else_action_json or {}
-            effective_action = else_cfg.get("route_action") or "else_fallback"
+            effective_action = (
+                None if (apply_mutations and doc_mutation_blocked) else (else_cfg.get("route_action") or "else_fallback")
+            )
 
         applied_actions = []
         if apply_mutations:
@@ -1265,85 +1278,103 @@ def evaluate_routing_rules(
                             details={"bpm_event": "routing.validation_blocked", "rule": rule.number, "errors": validation_errors},
                         )
                     elif used_else:
-                        else_cfg = rule.else_action_json or {}
-                        pop_changes = []
-                        if isinstance(else_cfg, dict) and (
-                            else_cfg.get("metadata_fields") or else_cfg.get("document_fields")
-                        ):
-                            pop_changes = _apply_auto_populate(tenant, document, else_cfg, actor=actor)
-                            applied_actions.extend(pop_changes)
-
-                        else_ra = str(else_cfg.get("route_action") or "").strip() if isinstance(else_cfg, dict) else ""
-                        if else_ra and else_ra != "else_fallback":
-                            if else_ra not in SUPPORTED_ELSE_ROUTE_ACTIONS:
-                                raise ValidationError(f"Unsupported else route_action '{else_ra}' on rule {rule.number}.")
-                            else_folder = _resolve_else_fk(
-                                tenant,
-                                DocumentFolder,
-                                else_cfg.get("destination_folder_id"),
-                                rule.destination_folder,
-                                "Else destination folder",
+                        if doc_mutation_blocked:
+                            validation_errors.append(
+                                "Document is protected by an active legal hold or locked record declaration."
                             )
-                            else_org = _resolve_else_fk(
-                                tenant,
-                                OrgUnit,
-                                else_cfg.get("route_to_org_unit_id"),
-                                rule.route_to_org_unit,
-                                "Else org unit",
-                            )
-                            else_role = _resolve_else_fk(
-                                tenant,
-                                Role,
-                                else_cfg.get("route_to_role_id"),
-                                rule.route_to_role,
-                                "Else role",
-                            )
-                            else_user = _resolve_else_fk(
-                                tenant,
-                                User,
-                                else_cfg.get("route_to_user_id"),
-                                rule.route_to_user,
-                                "Else user",
-                                require_active=True,
-                            )
-                            else_proc = _resolve_else_fk(
-                                tenant,
-                                DocumentProcessDefinition,
-                                else_cfg.get("process_definition_id"),
-                                rule.process_definition,
-                                "Else process definition",
-                            )
-                            applied_actions.extend(
-                                _execute_route_action(
-                                    tenant=tenant,
-                                    document=document,
-                                    rule=rule,
-                                    action_name=else_ra,
-                                    User=User,
-                                    destination_folder=else_folder,
-                                    route_to_org_unit=else_org,
-                                    route_to_role=else_role,
-                                    route_to_user=else_user,
-                                    process_definition=else_proc,
-                                    actor=actor,
-                                    request=request,
-                                    emit_move_audit=False,
-                                )
-                            )
-                        if pop_changes or applied_actions:
                             log_document_event(
                                 tenant=tenant,
-                                action_type="moved" if else_ra == "move_to_folder" and else_folder else "edited",
+                                action_type="workflow_rejected",
                                 document=document,
                                 actor=actor,
                                 request=request,
+                                is_success=False,
+                                failure_reason="legal_hold_or_locked_record",
                                 details={
-                                    "bpm_event": "routing.else_fallback",
+                                    "bpm_event": "routing.legal_hold_blocked",
                                     "rule": rule.number,
-                                    "action": else_ra or "else_fallback",
-                                    "changes": applied_actions,
                                 },
                             )
+                        else:
+                            else_cfg = rule.else_action_json or {}
+                            pop_changes = []
+                            if isinstance(else_cfg, dict) and (
+                                else_cfg.get("metadata_fields") or else_cfg.get("document_fields")
+                            ):
+                                pop_changes = _apply_auto_populate(tenant, document, else_cfg, actor=actor)
+                                applied_actions.extend(pop_changes)
+
+                            else_ra = str(else_cfg.get("route_action") or "").strip() if isinstance(else_cfg, dict) else ""
+                            if else_ra and else_ra != "else_fallback":
+                                if else_ra not in SUPPORTED_ELSE_ROUTE_ACTIONS:
+                                    raise ValidationError(f"Unsupported else route_action '{else_ra}' on rule {rule.number}.")
+                                else_folder = _resolve_else_fk(
+                                    tenant,
+                                    DocumentFolder,
+                                    else_cfg.get("destination_folder_id"),
+                                    rule.destination_folder,
+                                    "Else destination folder",
+                                )
+                                else_org = _resolve_else_fk(
+                                    tenant,
+                                    OrgUnit,
+                                    else_cfg.get("route_to_org_unit_id"),
+                                    rule.route_to_org_unit,
+                                    "Else org unit",
+                                )
+                                else_role = _resolve_else_fk(
+                                    tenant,
+                                    Role,
+                                    else_cfg.get("route_to_role_id"),
+                                    rule.route_to_role,
+                                    "Else role",
+                                )
+                                else_user = _resolve_else_fk(
+                                    tenant,
+                                    User,
+                                    else_cfg.get("route_to_user_id"),
+                                    rule.route_to_user,
+                                    "Else user",
+                                    require_active=True,
+                                )
+                                else_proc = _resolve_else_fk(
+                                    tenant,
+                                    DocumentProcessDefinition,
+                                    else_cfg.get("process_definition_id"),
+                                    rule.process_definition,
+                                    "Else process definition",
+                                )
+                                applied_actions.extend(
+                                    _execute_route_action(
+                                        tenant=tenant,
+                                        document=document,
+                                        rule=rule,
+                                        action_name=else_ra,
+                                        User=User,
+                                        destination_folder=else_folder,
+                                        route_to_org_unit=else_org,
+                                        route_to_role=else_role,
+                                        route_to_user=else_user,
+                                        process_definition=else_proc,
+                                        actor=actor,
+                                        request=request,
+                                        emit_move_audit=False,
+                                    )
+                                )
+                            if pop_changes or applied_actions:
+                                log_document_event(
+                                    tenant=tenant,
+                                    action_type="moved" if else_ra == "move_to_folder" and else_folder else "edited",
+                                    document=document,
+                                    actor=actor,
+                                    request=request,
+                                    details={
+                                        "bpm_event": "routing.else_fallback",
+                                        "rule": rule.number,
+                                        "action": else_ra or "else_fallback",
+                                        "changes": applied_actions,
+                                    },
+                                )
 
         if apply_mutations and applied_actions:
             doc_ctx = build_document_context(tenant, document)
