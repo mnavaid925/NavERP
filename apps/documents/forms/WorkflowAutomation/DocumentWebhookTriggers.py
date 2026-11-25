@@ -76,12 +76,16 @@ class DocumentWebhookTriggerForm(TenantUniqueMixin, TenantModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if self.tenant:
-            self.fields["process_definition"].queryset = DocumentProcessDefinition.objects.filter(
-                tenant=self.tenant
-            ).order_by("code", "-version_number")
-            self.fields["connector_ref"].queryset = ConnectorDefinition.objects.filter(
-                tenant=self.tenant
-            ).order_by("category", "name")
+            self.fields["process_definition"].queryset = (
+                DocumentProcessDefinition.objects.filter(tenant=self.tenant)
+                .only("id", "number", "code", "name", "version_number", "tenant_id")
+                .order_by("code", "-version_number")
+            )
+            self.fields["connector_ref"].queryset = (
+                ConnectorDefinition.objects.filter(tenant=self.tenant)
+                .only("id", "category", "name", "tenant_id")
+                .order_by("category", "name")
+            )
         else:
             self.fields["process_definition"].queryset = DocumentProcessDefinition.objects.none()
             self.fields["connector_ref"].queryset = ConnectorDefinition.objects.none()
@@ -138,8 +142,10 @@ class WebhookTestPingForm(forms.Form):
     def __init__(self, *args, tenant=None, **kwargs):
         super().__init__(*args, **kwargs)
         if tenant is not None:
-            self.fields["document"].queryset = Document.objects.filter(
-                tenant=tenant
-            ).order_by("-created_at", "title")
+            self.fields["document"].queryset = (
+                Document.objects.filter(tenant=tenant)
+                .only("id", "number", "title", "current_version_label", "created_at", "tenant_id")
+                .order_by("-created_at", "title")
+            )
         else:
             self.fields["document"].queryset = Document.objects.none()
