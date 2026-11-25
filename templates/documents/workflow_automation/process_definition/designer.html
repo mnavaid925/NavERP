@@ -30,8 +30,8 @@
 </div>
 
 {% if not validation_result.is_valid %}
-<div class="card mb-6 border-red-200 bg-red-50">
-    <div class="card-body text-red-700 text-sm space-y-1">
+<div class="card mb-6 border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/50">
+    <div class="card-body text-red-700 dark:text-red-200 text-sm space-y-1">
         <div class="font-semibold">BPMN Validation Errors:</div>
         {% for err in validation_result.errors %}
         <div>• {{ err }}</div>
@@ -41,8 +41,8 @@
 {% endif %}
 
 {% if validation_result.warnings %}
-<div class="card mb-6 border-amber-200 bg-amber-50">
-    <div class="card-body text-amber-800 text-sm space-y-1">
+<div class="card mb-6 border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/50">
+    <div class="card-body text-amber-800 dark:text-amber-200 text-sm space-y-1">
         <div class="font-semibold">Graph Warnings:</div>
         {% for warn in validation_result.warnings %}
         <div>• {{ warn }}</div>
@@ -54,17 +54,17 @@
 <div class="card mb-6">
     <div class="card-header flex items-center justify-between">
         <div>
-            <h2 class="text-base font-semibold text-slate-800">Swimlane Process Map</h2>
-            <p class="text-xs text-slate-500">Visual layout of swimlanes, decision gateways (XOR/AND/OR), and directed transitions.</p>
+            <h2 class="text-base font-semibold text-slate-800 dark:text-slate-100">Swimlane Process Map</h2>
+            <p class="text-xs text-slate-500 dark:text-slate-400">Visual layout of swimlanes, decision gateways (XOR/AND/OR), and directed transitions.</p>
         </div>
         <span class="badge badge-info">{{ nodes|length }} Nodes · {{ transitions|length }} Transitions</span>
     </div>
-    <div class="card-body bg-slate-50 space-y-4">
+    <div class="card-body bg-slate-50 dark:bg-slate-900/60 space-y-4">
         {% for lane in swimlanes %}
-        <div class="bg-white rounded-lg border border-slate-200 p-4">
-            <div class="flex items-center justify-between border-b border-slate-100 pb-2 mb-3">
-                <div class="font-semibold text-sm text-slate-800 flex items-center gap-2">
-                    <i data-lucide="layers" class="w-4 h-4 text-blue-600"></i>
+        <div class="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 p-4">
+            <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-700 pb-2 mb-3">
+                <div class="font-semibold text-sm text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                    <i data-lucide="layers" class="w-4 h-4 text-blue-600 dark:text-blue-400"></i>
                     <span>{{ lane.name|default:lane.id }}</span>
                 </div>
                 <span class="badge badge-slate font-mono text-xs">{{ lane.id }}</span>
@@ -72,40 +72,40 @@
             <div class="flex flex-wrap gap-3">
                 {% for node in nodes %}
                 {% if node.lane_id == lane.id %}
-                <div class="p-3 rounded border border-slate-200 bg-slate-50 min-w-[190px]">
+                <div class="p-3 rounded border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 min-w-[190px]">
                     <div class="flex items-center justify-between gap-2 mb-1">
-                        <span class="font-semibold text-xs text-slate-900">{{ node.label|default:node.id }}</span>
+                        <span class="font-semibold text-xs text-slate-900 dark:text-slate-100">{{ node.label|default:node.id }}</span>
                         <span class="badge badge-info">{{ node.type }}</span>
                     </div>
-                    <div class="text-xs text-slate-500 font-mono">id: {{ node.id }}{% if node.sla_hours %} · SLA {{ node.sla_hours }}h{% endif %}</div>
+                    <div class="text-xs text-slate-500 dark:text-slate-400 font-mono">id: {{ node.id }}{% if node.sla_hours %} · SLA {{ node.sla_hours }}h{% endif %}</div>
                 </div>
                 {% endif %}
                 {% endfor %}
             </div>
         </div>
         {% empty %}
-        <div class="bg-white rounded-lg border border-slate-200 p-4">
+        <div class="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 p-4">
             <div class="flex flex-wrap gap-3">
                 {% for node in nodes %}
-                <div class="p-3 rounded border border-slate-200 bg-slate-50 min-w-[190px]">
-                    <div class="font-semibold text-xs text-slate-900">{{ node.label|default:node.id }}</div>
-                    <div class="text-xs text-slate-500">{{ node.type }}</div>
+                <div class="p-3 rounded border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 min-w-[190px]">
+                    <div class="font-semibold text-xs text-slate-900 dark:text-slate-100">{{ node.label|default:node.id }}</div>
+                    <div class="text-xs text-slate-500 dark:text-slate-400">{{ node.type }}</div>
                 </div>
                 {% endfor %}
             </div>
         </div>
         {% endfor %}
 
-        <div class="bg-white rounded-lg border border-slate-200 p-4">
-            <h3 class="text-xs font-semibold uppercase text-slate-500 mb-2">Transitions &amp; Gateway Conditions</h3>
+        <div class="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 p-4">
+            <h3 class="text-xs font-semibold uppercase text-slate-500 dark:text-slate-400 mb-2">Transitions &amp; Gateway Conditions</h3>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
                 {% for edge in transitions %}
-                <div class="p-2 rounded border border-slate-100 bg-slate-50 text-xs flex items-center justify-between">
-                    <span class="font-mono text-slate-700">{{ edge.from_node }} &rarr; {{ edge.to_node }}</span>
-                    <span class="text-slate-600">{{ edge.label|default:"next" }}{% if edge.is_default %} <span class="badge badge-green">Default</span>{% endif %}</span>
+                <div class="p-2 rounded border border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-xs flex items-center justify-between">
+                    <span class="font-mono text-slate-700 dark:text-slate-200">{{ edge.from_node }} &rarr; {{ edge.to_node }}</span>
+                    <span class="text-slate-600 dark:text-slate-300">{{ edge.label|default:"next" }}{% if edge.is_default %} <span class="badge badge-green">Default</span>{% endif %}</span>
                 </div>
                 {% empty %}
-                <span class="text-xs text-slate-500">No transitions defined.</span>
+                <span class="text-xs text-slate-500 dark:text-slate-400">No transitions defined.</span>
                 {% endfor %}
             </div>
         </div>
@@ -114,20 +114,20 @@
 
 <div class="card mb-6">
     <div class="card-header">
-        <h2 class="text-base font-semibold text-slate-800">Simulated Dry-Run Path</h2>
+        <h2 class="text-base font-semibold text-slate-800 dark:text-slate-100">Simulated Dry-Run Path</h2>
     </div>
     <div class="card-body">
         <div class="flex flex-wrap items-center gap-2">
             {% for step in simulation_steps %}
-            <div class="px-3 py-2 rounded border border-slate-200 bg-slate-50 text-xs">
-                <div class="font-semibold text-slate-800">{{ step.label }}</div>
-                <div class="text-slate-500">{{ step.type }}</div>
+            <div class="px-3 py-2 rounded border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-xs">
+                <div class="font-semibold text-slate-800 dark:text-slate-100">{{ step.label }}</div>
+                <div class="text-slate-500 dark:text-slate-400">{{ step.type }}</div>
             </div>
             {% if not forloop.last %}
             <i data-lucide="arrow-right" class="w-4 h-4 text-slate-400"></i>
             {% endif %}
             {% empty %}
-            <span class="text-xs text-slate-500">Add start_event and end_event nodes to simulate execution path.</span>
+            <span class="text-xs text-slate-500 dark:text-slate-400">Add start_event and end_event nodes to simulate execution path.</span>
             {% endfor %}
         </div>
     </div>
@@ -135,7 +135,7 @@
 
 <div class="card">
     <div class="card-header">
-        <h2 class="text-base font-semibold text-slate-800">Edit BPMN Graph JSON</h2>
+        <h2 class="text-base font-semibold text-slate-800 dark:text-slate-100">Edit BPMN Graph JSON</h2>
     </div>
     <div class="card-body">
         <form method="post" class="space-y-4">
