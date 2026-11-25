@@ -116,7 +116,7 @@
                             <td class="text-xs font-mono">{{ entry.event }}</td>
                             <td><span class="badge badge-info">{{ entry.status }}</span></td>
                             <td class="text-xs font-mono text-slate-600 dark:text-slate-300">{{ entry.signature_header|default:"—" }}</td>
-                            <td class="text-xs font-mono text-slate-600 dark:text-slate-300">{{ entry.payload|truncatechars:70 }}</td>
+                            <td class="text-xs font-mono text-slate-600 dark:text-slate-300">{{ entry.payload_json|default:"{}"|truncatechars:70 }}</td>
                         </tr>
                         {% empty %}
                         <tr><td colspan="5" class="text-center text-xs text-slate-500 dark:text-slate-400 py-4">No simulated deliveries recorded yet. Send a test ping to inspect the signed payload envelope.</td></tr>
