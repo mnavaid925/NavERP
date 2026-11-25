@@ -35,8 +35,8 @@
     <div class="lg:col-span-2 space-y-6">
         <div class="card">
             <div class="card-header flex items-center justify-between">
-                <h2 class="text-base font-semibold text-slate-800">BPMN Blueprint Specification</h2>
-                <span class="text-xs font-mono text-slate-500">{{ process_def.code }} v{{ process_def.version_number }}</span>
+                <h2 class="text-base font-semibold text-slate-800 dark:text-slate-100">BPMN Blueprint Specification</h2>
+                <span class="text-xs font-mono text-slate-500 dark:text-slate-400">{{ process_def.code }} v{{ process_def.version_number }}</span>
             </div>
             <div class="card-body">
                 <dl class="detail-grid">
@@ -82,9 +82,9 @@
                     </div>
                 </dl>
                 {% if process_def.description %}
-                <div class="mt-4 pt-4 border-t border-slate-100">
-                    <h3 class="text-xs font-semibold uppercase text-slate-500 mb-1">Description</h3>
-                    <p class="text-sm text-slate-700 whitespace-pre-line">{{ process_def.description }}</p>
+                <div class="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700">
+                    <h3 class="text-xs font-semibold uppercase text-slate-500 dark:text-slate-400 mb-1">Description</h3>
+                    <p class="text-sm text-slate-700 dark:text-slate-200 whitespace-pre-line">{{ process_def.description }}</p>
                 </div>
                 {% endif %}
             </div>
@@ -92,7 +92,7 @@
 
         <div class="card">
             <div class="card-header flex items-center justify-between">
-                <h2 class="text-base font-semibold text-slate-800">Graph Validation &amp; Dry-Run Path</h2>
+                <h2 class="text-base font-semibold text-slate-800 dark:text-slate-100">Graph Validation &amp; Dry-Run Path</h2>
                 {% if validation_result.is_valid %}
                 <span class="badge badge-green">Valid BPMN Graph</span>
                 {% else %}
@@ -101,14 +101,14 @@
             </div>
             <div class="card-body space-y-4">
                 {% if validation_result.errors %}
-                <div class="p-3 rounded border border-red-200 bg-red-50 text-red-700 text-xs space-y-1">
+                <div class="p-3 rounded border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/50 text-red-700 dark:text-red-200 text-xs space-y-1">
                     {% for err in validation_result.errors %}
                     <div>• {{ err }}</div>
                     {% endfor %}
                 </div>
                 {% endif %}
                 {% if validation_result.warnings %}
-                <div class="p-3 rounded border border-amber-200 bg-amber-50 text-amber-800 text-xs space-y-1">
+                <div class="p-3 rounded border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/50 text-amber-800 dark:text-amber-200 text-xs space-y-1">
                     {% for warn in validation_result.warnings %}
                     <div>• {{ warn }}</div>
                     {% endfor %}
@@ -116,18 +116,18 @@
                 {% endif %}
 
                 <div>
-                    <h3 class="text-xs font-semibold uppercase text-slate-500 mb-2">Simulated Execution Sequence</h3>
+                    <h3 class="text-xs font-semibold uppercase text-slate-500 dark:text-slate-400 mb-2">Simulated Execution Sequence</h3>
                     <div class="flex flex-wrap items-center gap-2">
                         {% for step in simulation_steps %}
-                        <div class="px-3 py-2 rounded border border-slate-200 bg-slate-50 text-xs">
-                            <div class="font-semibold text-slate-800">{{ step.label }}</div>
-                            <div class="text-slate-500">{{ step.type }}{% if step.lane %} · {{ step.lane }}{% endif %}</div>
+                        <div class="px-3 py-2 rounded border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-xs">
+                            <div class="font-semibold text-slate-800 dark:text-slate-100">{{ step.label }}</div>
+                            <div class="text-slate-500 dark:text-slate-400">{{ step.type }}{% if step.lane %} · {{ step.lane }}{% endif %}</div>
                         </div>
                         {% if not forloop.last %}
                         <i data-lucide="arrow-right" class="w-4 h-4 text-slate-400"></i>
                         {% endif %}
                         {% empty %}
-                        <span class="text-xs text-slate-500">No simulation path available. Open Visual Designer to add nodes.</span>
+                        <span class="text-xs text-slate-500 dark:text-slate-400">No simulation path available. Open Visual Designer to add nodes.</span>
                         {% endfor %}
                     </div>
                 </div>
@@ -136,7 +136,7 @@
 
         <div class="card">
             <div class="card-header flex items-center justify-between">
-                <h2 class="text-base font-semibold text-slate-800">Linked Routing Rules ({{ routing_rules|length }})</h2>
+                <h2 class="text-base font-semibold text-slate-800 dark:text-slate-100">Linked Routing Rules ({{ routing_rules|length }})</h2>
                 <a href="{% url 'documents:routing_rule_create' %}?process_definition={{ process_def.pk }}" class="btn btn-outline btn-sm">Add Rule</a>
             </div>
             <div class="table-wrap">
@@ -154,14 +154,14 @@
                         <tr>
                             <td class="font-mono text-xs">{{ rule.priority }}</td>
                             <td>
-                                <a href="{% url 'documents:routing_rule_detail' rule.pk %}" class="text-blue-600 hover:underline font-medium">{{ rule.name }}</a>
-                                <div class="text-xs text-slate-500 font-mono">{{ rule.number }}</div>
+                                <a href="{% url 'documents:routing_rule_detail' rule.pk %}" class="text-blue-600 dark:text-blue-400 hover:underline font-medium">{{ rule.name }}</a>
+                                <div class="text-xs text-slate-500 dark:text-slate-400 font-mono">{{ rule.number }}</div>
                             </td>
                             <td><span class="badge {{ rule.route_action_badge }}">{{ rule.get_route_action_display }}</span></td>
                             <td class="text-xs font-mono">{{ rule.match_count }} / {{ rule.execution_count }}</td>
                         </tr>
                         {% empty %}
-                        <tr><td colspan="4" class="text-center text-xs text-slate-500 py-4">No routing rules attached to this blueprint.</td></tr>
+                        <tr><td colspan="4" class="text-center text-xs text-slate-500 dark:text-slate-400 py-4">No routing rules attached to this blueprint.</td></tr>
                         {% endfor %}
                     </tbody>
                 </table>
@@ -170,8 +170,8 @@
 
         <div class="card">
             <div class="card-header flex items-center justify-between">
-                <h2 class="text-base font-semibold text-slate-800">Recent Execution Instances ({{ process_def.instance_count }})</h2>
-                <a href="{% url 'documents:process_instance_list' %}?process_definition={{ process_def.pk }}" class="text-xs text-blue-600 hover:underline">View All</a>
+                <h2 class="text-base font-semibold text-slate-800 dark:text-slate-100">Recent Execution Instances ({{ process_def.instance_count }})</h2>
+                <a href="{% url 'documents:process_instance_list' %}?process_definition={{ process_def.pk }}" class="text-xs text-blue-600 dark:text-blue-400 hover:underline">View All</a>
             </div>
             <div class="table-wrap">
                 <table class="table">
@@ -187,14 +187,14 @@
                         {% for inst in recent_instances %}
                         <tr>
                             <td>
-                                <a href="{% url 'documents:process_instance_detail' inst.pk %}" class="font-mono text-blue-600 hover:underline">{{ inst.number }}</a>
+                                <a href="{% url 'documents:process_instance_detail' inst.pk %}" class="font-mono text-blue-600 dark:text-blue-400 hover:underline">{{ inst.number }}</a>
                             </td>
                             <td class="text-sm">{{ inst.document.title|truncatechars:40 }}</td>
-                            <td class="text-xs text-slate-600">{{ inst.current_node_label|default:inst.current_node_id }}</td>
+                            <td class="text-xs text-slate-600 dark:text-slate-300">{{ inst.current_node_label|default:inst.current_node_id }}</td>
                             <td><span class="badge {{ inst.status_badge }}">{{ inst.get_status_display }}</span></td>
                         </tr>
                         {% empty %}
-                        <tr><td colspan="4" class="text-center text-xs text-slate-500 py-4">No instances launched yet.</td></tr>
+                        <tr><td colspan="4" class="text-center text-xs text-slate-500 dark:text-slate-400 py-4">No instances launched yet.</td></tr>
                         {% endfor %}
                     </tbody>
                 </table>
@@ -205,7 +205,7 @@
     <div class="space-y-6">
         <div class="card">
             <div class="card-header">
-                <h2 class="text-base font-semibold text-slate-800">Actions</h2>
+                <h2 class="text-base font-semibold text-slate-800 dark:text-slate-100">Actions</h2>
             </div>
             <div class="card-body space-y-2">
                 <a href="{% url 'documents:process_definition_list' %}" class="btn btn-outline w-full justify-start">
@@ -256,16 +256,16 @@
 
         <div class="card">
             <div class="card-header">
-                <h2 class="text-base font-semibold text-slate-800">Connected Webhooks ({{ webhooks|length }})</h2>
+                <h2 class="text-base font-semibold text-slate-800 dark:text-slate-100">Connected Webhooks ({{ webhooks|length }})</h2>
             </div>
             <div class="card-body space-y-2">
                 {% for wh in webhooks %}
-                <div class="p-2 rounded border border-slate-200 text-xs">
-                    <a href="{% url 'documents:webhook_trigger_detail' wh.pk %}" class="font-semibold text-blue-600 hover:underline">{{ wh.name }}</a>
-                    <div class="text-slate-500 font-mono">{{ wh.trigger_event }}</div>
+                <div class="p-2 rounded border border-slate-200 dark:border-slate-700 text-xs">
+                    <a href="{% url 'documents:webhook_trigger_detail' wh.pk %}" class="font-semibold text-blue-600 dark:text-blue-400 hover:underline">{{ wh.name }}</a>
+                    <div class="text-slate-500 dark:text-slate-400 font-mono">{{ wh.trigger_event }}</div>
                 </div>
                 {% empty %}
-                <p class="text-xs text-slate-500">No webhooks attached to this process.</p>
+                <p class="text-xs text-slate-500 dark:text-slate-400">No webhooks attached to this process.</p>
                 {% endfor %}
             </div>
         </div>
