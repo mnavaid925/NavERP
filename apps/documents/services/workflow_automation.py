@@ -438,6 +438,19 @@ def simulate_process_path(process_def, context=None):
     return steps
 
 
+def _extract_metadata_value(mv):
+    """Extract raw typed metadata value without UI placeholder ('—') or truncation."""
+    if mv.data_type in ("integer", "decimal"):
+        return mv.value_number
+    if mv.data_type in ("date", "datetime"):
+        return mv.value_date.isoformat() if mv.value_date is not None else None
+    if mv.data_type == "boolean":
+        return mv.value_boolean
+    if mv.data_type == "json":
+        return (mv.value_json or "").strip()
+    return (mv.value_text or "").strip()
+
+
 def build_document_context(tenant, document):
     """Build unified attribute, metadata, and OCR context dictionary for rule evaluation."""
     from apps.documents.models.MetadataIndexing.DocumentMetadataValues import DocumentMetadataValue
@@ -449,7 +462,7 @@ def build_document_context(tenant, document):
     ).order_by("field_name")
     metadata = {}
     for mv in meta_qs:
-        metadata[mv.field_name] = mv.display_value
+        metadata[mv.field_name] = _extract_metadata_value(mv)
 
     ocr_job = (
         DocumentOcrJob.objects.filter(tenant=tenant, document=document, status="completed")
@@ -668,7 +681,7 @@ def evaluate_routing_rules(
                 msg = vrule.get("message") or f"Validation check '{check_kind}' failed."
                 if check_kind == "required_metadata" and vfield:
                     val = doc_ctx["metadata"].get(vfield)
-                    if val is None or str(val).strip() == "":
+                    if val is None or _as_eval_str(val).strip() == "":
                         validation_errors.append(msg)
                 elif check_kind == "min_ocr_confidence":
                     min_conf = _to_finite_decimal(vrule.get("min_confidence", 0.7))
