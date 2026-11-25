@@ -20,10 +20,12 @@
             <i data-lucide="git-branch"></i>
             <span>Process Blueprints</span>
         </a>
+        {% if user.is_superuser or user.is_tenant_admin %}
         <a href="{% url 'documents:webhook_trigger_create' %}" class="btn btn-primary">
             <i data-lucide="plus"></i>
             <span>New Webhook Trigger</span>
         </a>
+        {% endif %}
     </div>
 </div>
 
@@ -148,10 +150,10 @@
                         <a href="{% url 'documents:webhook_trigger_detail' wh.pk %}" class="btn btn-icon" title="Inspect Webhook" aria-label="View {{ wh.number }}">
                             <i data-lucide="eye"></i>
                         </a>
+                        {% if user.is_superuser or user.is_tenant_admin %}
                         <a href="{% url 'documents:webhook_trigger_edit' wh.pk %}" class="btn btn-icon" title="Edit Webhook" aria-label="Edit {{ wh.number }}">
                             <i data-lucide="pencil"></i>
                         </a>
-                        {% if user.is_superuser or user.is_tenant_admin %}
                         <form method="post" action="{% url 'documents:webhook_trigger_delete' wh.pk %}" class="inline" onsubmit="return confirm('Delete webhook trigger {{ wh.number }}?');">
                             {% csrf_token %}
                             <button type="submit" class="btn btn-icon danger" title="Delete Webhook" aria-label="Delete {{ wh.number }}">
@@ -168,7 +170,9 @@
                             <i data-lucide="webhook" class="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto mb-2"></i>
                             <p class="font-medium text-slate-700 dark:text-slate-200">No webhook triggers configured</p>
                             <p class="text-xs text-slate-500 dark:text-slate-400 mb-3">Register SSRF-hardened DMS webhook triggers with HMAC-SHA256 signing and local simulated diagnostics.</p>
+                            {% if user.is_superuser or user.is_tenant_admin %}
                             <a href="{% url 'documents:webhook_trigger_create' %}" class="btn btn-primary btn-sm">New Webhook Trigger</a>
+                            {% endif %}
                         </div>
                     </td>
                 </tr>
