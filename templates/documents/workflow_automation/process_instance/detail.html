@@ -73,6 +73,14 @@
                         <dd>{% if instance.current_assignee %}{{ instance.current_assignee.get_full_name|default:instance.current_assignee.username }}{% else %}Unassigned{% endif %}</dd>
                     </div>
                     <div class="detail-item">
+                        <dt>Document Version</dt>
+                        <dd>{% if instance.version %}v{{ instance.version.version_label }} ({{ instance.version.number }}){% else %}—{% endif %}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Department</dt>
+                        <dd>{% if instance.department %}{{ instance.department.name }}{% else %}—{% endif %}</dd>
+                    </div>
+                    <div class="detail-item">
                         <dt>Spawned 13.3 Approval</dt>
                         <dd>
                             {% if instance.approval_workflow %}
@@ -89,10 +97,38 @@
                         </dd>
                     </div>
                 </dl>
+                {% if instance.error_message %}
+                <div class="mt-4 p-3 rounded border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/50 text-xs text-red-700 dark:text-red-200">
+                    <div class="font-semibold mb-1">Execution Error</div>
+                    <div class="font-mono whitespace-pre-wrap break-words">{{ instance.error_message }}</div>
+                </div>
+                {% endif %}
+                {% if blueprint_nodes %}
+                <div class="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700">
+                    <div class="text-xs font-semibold uppercase text-slate-500 dark:text-slate-400 mb-2">Blueprint Node Progression</div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        {% for node in blueprint_nodes %}
+                        <div class="px-2.5 py-1.5 rounded border text-xs flex items-center gap-1.5 {% if node.id == instance.current_node_id %}border-blue-400 dark:border-blue-500 bg-blue-50 dark:bg-blue-950/50 text-blue-800 dark:text-blue-200 font-semibold{% elif node.id in completed_node_ids %}border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-950/40 text-green-800 dark:text-green-200{% else %}border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-300{% endif %}">
+                            <span>{{ node.label|default:node.id }}</span>
+                            <span class="font-mono text-[10px] opacity-75">({{ node.type }})</span>
+                        </div>
+                        {% if not forloop.last %}
+                        <i data-lucide="chevron-right" class="w-3.5 h-3.5 text-slate-400"></i>
+                        {% endif %}
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
                 {% if instance.variant_signature %}
                 <div class="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700">
                     <div class="text-xs font-semibold uppercase text-slate-500 dark:text-slate-400 mb-1">Process Mining Variant Signature</div>
-                    <div class="font-mono text-xs bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 p-2 rounded border border-slate-200 dark:border-slate-700">{{ instance.variant_signature }}</div>
+                    <div class="font-mono text-xs bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 p-2 rounded border border-slate-200 dark:border-slate-700 break-words">{{ instance.variant_signature }}</div>
+                </div>
+                {% endif %}
+                {% if instance.context_variables_json %}
+                <div class="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700">
+                    <div class="text-xs font-semibold uppercase text-slate-500 dark:text-slate-400 mb-1">Runtime Context Variables</div>
+                    <pre class="font-mono text-xs bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 p-3 rounded border border-slate-200 dark:border-slate-700 overflow-x-auto">{{ context_variables }}</pre>
                 </div>
                 {% endif %}
             </div>
@@ -149,13 +185,18 @@
             <div class="card-body">
                 <form method="post" action="{% url 'documents:process_instance_advance' instance.pk %}" class="space-y-3">
                     {% csrf_token %}
+                    {% if advance_form.non_field_errors %}
+                    <div class="p-2 bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-800 rounded text-red-700 dark:text-red-200 text-xs">{{ advance_form.non_field_errors }}</div>
+                    {% endif %}
                     <div class="form-group">
                         <label class="form-label" for="{{ advance_form.outcome.id_for_label }}">Transition Outcome</label>
                         {{ advance_form.outcome }}
+                        {% if advance_form.outcome.errors %}<div class="form-error">{{ advance_form.outcome.errors }}</div>{% endif %}
                     </div>
                     <div class="form-group">
                         <label class="form-label" for="{{ advance_form.notes.id_for_label }}">Notes</label>
                         {{ advance_form.notes }}
+                        {% if advance_form.notes.errors %}<div class="form-error">{{ advance_form.notes.errors }}</div>{% endif %}
                     </div>
                     <button type="submit" class="btn btn-primary w-full">
                         <i data-lucide="fast-forward"></i>
