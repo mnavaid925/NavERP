@@ -160,19 +160,19 @@
                         </span>
                     </td>
                     <td class="table-actions text-right">
-                        <a href="{% url 'documents:routing_rule_detail' rule.pk %}" class="btn btn-icon btn-outline" title="View Rule" aria-label="View {{ rule.number }}">
+                        <a href="{% url 'documents:routing_rule_detail' rule.pk %}" class="btn btn-icon" title="View Rule" aria-label="View {{ rule.number }}">
                             <i data-lucide="eye"></i>
                         </a>
-                        <a href="{% url 'documents:routing_rule_simulator' %}?rule={{ rule.pk }}" class="btn btn-icon btn-outline" title="Test in Simulator" aria-label="Simulate {{ rule.number }}">
+                        <a href="{% url 'documents:routing_rule_simulator' %}?rule={{ rule.pk }}" class="btn btn-icon" title="Test in Simulator" aria-label="Simulate {{ rule.number }}">
                             <i data-lucide="flask-conical"></i>
                         </a>
-                        <a href="{% url 'documents:routing_rule_edit' rule.pk %}" class="btn btn-icon btn-outline" title="Edit Rule" aria-label="Edit {{ rule.number }}">
+                        <a href="{% url 'documents:routing_rule_edit' rule.pk %}" class="btn btn-icon" title="Edit Rule" aria-label="Edit {{ rule.number }}">
                             <i data-lucide="pencil"></i>
                         </a>
                         {% if user.is_superuser or user.is_tenant_admin %}
                         <form method="post" action="{% url 'documents:routing_rule_delete' rule.pk %}" class="inline" onsubmit="return confirm('Delete routing rule {{ rule.number }}?');">
                             {% csrf_token %}
-                            <button type="submit" class="btn btn-icon btn-danger" title="Delete Rule" aria-label="Delete {{ rule.number }}">
+                            <button type="submit" class="btn btn-icon danger" title="Delete Rule" aria-label="Delete {{ rule.number }}">
                                 <i data-lucide="trash-2"></i>
                             </button>
                         </form>
