@@ -96,27 +96,41 @@ class DocumentRoutingRuleForm(TenantUniqueMixin, TenantModelForm):
         super().__init__(*args, **kwargs)
         User = get_user_model()
         if self.tenant:
-            self.fields["process_definition"].queryset = DocumentProcessDefinition.objects.filter(
-                tenant=self.tenant
-            ).order_by("code", "-version_number")
-            self.fields["core_rule_ref"].queryset = BusinessRule.objects.filter(
-                tenant=self.tenant
-            ).order_by("priority", "name")
-            self.fields["source_folder"].queryset = DocumentFolder.objects.filter(
-                tenant=self.tenant
-            ).order_by("path", "name")
-            self.fields["destination_folder"].queryset = DocumentFolder.objects.filter(
-                tenant=self.tenant
-            ).order_by("path", "name")
-            self.fields["route_to_org_unit"].queryset = OrgUnit.objects.filter(
-                tenant=self.tenant
-            ).order_by("name")
-            self.fields["route_to_role"].queryset = Role.objects.filter(
-                tenant=self.tenant
-            ).order_by("name")
-            self.fields["route_to_user"].queryset = User.objects.filter(
-                tenant=self.tenant, is_active=True
-            ).order_by("username")
+            self.fields["process_definition"].queryset = (
+                DocumentProcessDefinition.objects.filter(tenant=self.tenant)
+                .only("id", "number", "code", "name", "version_number", "tenant_id")
+                .order_by("code", "-version_number")
+            )
+            self.fields["core_rule_ref"].queryset = (
+                BusinessRule.objects.filter(tenant=self.tenant)
+                .only("id", "name", "trigger", "action", "priority", "tenant_id")
+                .order_by("priority", "name")
+            )
+            self.fields["source_folder"].queryset = (
+                DocumentFolder.objects.filter(tenant=self.tenant)
+                .only("id", "number", "path", "name", "tenant_id")
+                .order_by("path", "name")
+            )
+            self.fields["destination_folder"].queryset = (
+                DocumentFolder.objects.filter(tenant=self.tenant)
+                .only("id", "number", "path", "name", "tenant_id")
+                .order_by("path", "name")
+            )
+            self.fields["route_to_org_unit"].queryset = (
+                OrgUnit.objects.filter(tenant=self.tenant)
+                .only("id", "name", "tenant_id")
+                .order_by("name")
+            )
+            self.fields["route_to_role"].queryset = (
+                Role.objects.filter(tenant=self.tenant)
+                .only("id", "name", "tenant_id")
+                .order_by("name")
+            )
+            self.fields["route_to_user"].queryset = (
+                User.objects.filter(tenant=self.tenant, is_active=True)
+                .only("id", "username", "email", "first_name", "last_name", "tenant_id")
+                .order_by("username")
+            )
         else:
             self.fields["process_definition"].queryset = DocumentProcessDefinition.objects.none()
             self.fields["core_rule_ref"].queryset = BusinessRule.objects.none()
