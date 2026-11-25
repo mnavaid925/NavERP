@@ -36,7 +36,6 @@ def routing_rule_list(request):
             "route_to_role",
             "route_to_user",
         ).defer(
-            "conditions_json",
             "else_action_json",
             "validation_rules_json",
             "auto_populate_json",
