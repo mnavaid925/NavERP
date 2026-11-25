@@ -1,10 +1,9 @@
-import json
-
 from django import forms
 from django.core.exceptions import ValidationError
 
 from apps.core.models import ConnectorDefinition
 from apps.documents.forms._common import TenantModelForm, TenantUniqueMixin, reject_foreign
+from apps.documents.forms.WorkflowAutomation._common import parse_json_field_value
 from apps.documents.models.VersionControl.Documents import Document
 from apps.documents.models.WorkflowAutomation.DocumentProcessDefinitions import (
     DocumentProcessDefinition,
@@ -16,25 +15,6 @@ from apps.documents.services.workflow_automation import (
     validate_dms_webhook_url,
     validate_flat_headers,
 )
-
-
-def _parse_json_dict(val, label):
-    if val is None or val == "":
-        return {}
-    if isinstance(val, dict):
-        return val
-    if isinstance(val, str):
-        stripped = val.strip()
-        if not stripped:
-            return {}
-        try:
-            parsed = json.loads(stripped)
-        except json.JSONDecodeError as exc:
-            raise ValidationError(f"Invalid JSON for {label}: {exc}") from exc
-        if not isinstance(parsed, dict):
-            raise ValidationError(f"{label} must be a JSON object.")
-        return parsed
-    raise ValidationError(f"{label} must be a JSON object.")
 
 
 class DocumentWebhookTriggerForm(TenantUniqueMixin, TenantModelForm):
@@ -107,11 +87,15 @@ class DocumentWebhookTriggerForm(TenantUniqueMixin, TenantModelForm):
         return raw
 
     def clean_custom_headers(self):
-        parsed = _parse_json_dict(self.cleaned_data.get("custom_headers"), "custom headers")
+        parsed = parse_json_field_value(
+            self.cleaned_data.get("custom_headers"), dict, "custom headers"
+        )
         return validate_flat_headers(parsed)
 
     def clean_payload_template_json(self):
-        return _parse_json_dict(self.cleaned_data.get("payload_template_json"), "payload template")
+        return parse_json_field_value(
+            self.cleaned_data.get("payload_template_json"), dict, "payload template"
+        )
 
     def clean(self):
         cleaned = super().clean()
