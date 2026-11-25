@@ -2,6 +2,7 @@ import json
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Q
@@ -24,9 +25,26 @@ from apps.documents.models.WorkflowAutomation.DocumentProcessInstances import (
 )
 from apps.documents.services.workflow_automation import (
     advance_process_instance,
+    cancel_process_instance,
     start_process_instance,
 )
 from apps.documents.views._common import documents_object, documents_scope
+
+
+def _is_tenant_admin(user):
+    return bool(user.is_superuser or getattr(user, "is_tenant_admin", False))
+
+
+def _can_advance_instance(user, instance):
+    if _is_tenant_admin(user):
+        return True
+    if instance.current_assignee_id is not None:
+        return instance.current_assignee_id == user.id
+    return True
+
+
+def _can_cancel_or_force_complete(user, instance):
+    return _is_tenant_admin(user) or instance.initiated_by_id == user.id
 
 
 @login_required
@@ -120,11 +138,24 @@ def process_instance_detail(request, pk):
             "current_assignee",
         ),
     )
+    can_force_complete = _can_cancel_or_force_complete(request.user, instance)
+    is_terminal = instance.status in ("completed", "cancelled")
+    can_advance = (not is_terminal) and _can_advance_instance(request.user, instance)
+    can_cancel = (not is_terminal) and can_force_complete
+    advance_form = ProcessAdvanceForm()
+    if not can_force_complete:
+        advance_form.fields["outcome"].choices = [
+            choice for choice in ProcessAdvanceForm.OUTCOME_CHOICES if choice[0] != "completed"
+        ]
+
     context = {
         "instance": instance,
         "step_trace": instance.step_trace_json or [],
         "blueprint_nodes": instance.process_definition.nodes_json or [],
-        "advance_form": ProcessAdvanceForm(),
+        "advance_form": advance_form,
+        "can_advance": can_advance,
+        "can_force_complete": can_force_complete,
+        "can_cancel": can_cancel,
     }
     return render(request, "documents/workflow_automation/process_instance/detail.html", context)
 
@@ -222,22 +253,27 @@ def process_instance_advance(request, pk):
         request,
         DocumentProcessInstance,
         pk,
-        select_related=("process_definition", "document", "version"),
+        select_related=("tenant", "process_definition", "document", "version", "current_assignee", "initiated_by"),
     )
+    if not _can_advance_instance(request.user, instance):
+        raise PermissionDenied("Only an administrator or the assigned owner may advance this step.")
+    if request.POST.get("outcome") == "completed" and not _can_cancel_or_force_complete(request.user, instance):
+        raise PermissionDenied("Only an administrator or the initiator may force-complete this process.")
     if instance.status in ("completed", "cancelled"):
         messages.warning(request, f"Instance {instance.number} is already {instance.get_status_display()}.")
         return redirect("documents:process_instance_detail", pk=instance.pk)
 
     form = ProcessAdvanceForm(request.POST)
     if form.is_valid():
-        advance_process_instance(
-            instance,
-            outcome=form.cleaned_data["outcome"],
-            actor=request.user,
-            notes=form.cleaned_data.get("notes", ""),
-            request=request,
-        )
-        write_audit_log(request.user, instance, "advance", tenant=request.tenant)
+        with transaction.atomic():
+            instance = advance_process_instance(
+                instance,
+                outcome=form.cleaned_data["outcome"],
+                actor=request.user,
+                notes=form.cleaned_data.get("notes", ""),
+                request=request,
+            )
+            write_audit_log(request.user, instance, "advance", tenant=request.tenant)
         messages.success(request, f"Process instance {instance.number} transitioned ({instance.get_status_display()}).")
     else:
         messages.error(request, "Invalid step transition parameters.")
@@ -247,15 +283,20 @@ def process_instance_advance(request, pk):
 @login_required
 @require_POST
 def process_instance_cancel(request, pk):
-    instance = documents_object(request, DocumentProcessInstance, pk)
+    instance = documents_object(
+        request,
+        DocumentProcessInstance,
+        pk,
+        select_related=("tenant", "process_definition", "initiated_by"),
+    )
+    if not _can_cancel_or_force_complete(request.user, instance):
+        raise PermissionDenied("Only an administrator or the initiator may cancel this process.")
     if instance.status in ("completed", "cancelled"):
         messages.warning(request, "Completed or cancelled process instances cannot be cancelled.")
         return redirect("documents:process_instance_detail", pk=instance.pk)
 
     with transaction.atomic():
-        instance.status = "cancelled"
-        instance.completed_at = timezone.now()
-        instance.save(update_fields=["status", "completed_at", "updated_at"])
+        instance = cancel_process_instance(instance, actor=request.user, request=request)
         write_audit_log(request.user, instance, "cancel", tenant=request.tenant)
     messages.info(request, f"Process instance {instance.number} cancelled.")
     return redirect("documents:process_instance_detail", pk=instance.pk)
