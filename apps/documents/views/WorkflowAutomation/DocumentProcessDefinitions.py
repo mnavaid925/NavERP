@@ -3,7 +3,6 @@ import json
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
-from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Count, Q
 from django.db.models.deletion import ProtectedError
@@ -23,7 +22,12 @@ from apps.documents.models.WorkflowAutomation.DocumentProcessDefinitions import 
     DocumentProcessDefinition,
 )
 from apps.documents.services.workflow_automation import simulate_process_path
-from apps.documents.views._common import documents_object, documents_scope
+from apps.documents.views._common import (
+    documents_object,
+    documents_scope,
+    paginate_queryset,
+    parse_int_param,
+)
 
 DEFAULT_SWIMLANES = [
     {"id": "intake", "name": "Document Intake", "color": "blue"},
@@ -82,9 +86,9 @@ def process_definition_list(request):
     if trigger_event:
         qs = qs.filter(trigger_event=trigger_event)
 
-    department_id = request.GET.get("department", "").strip()
-    if department_id and department_id.isdigit():
-        qs = qs.filter(department_id=int(department_id))
+    department_id, dept_int_id = parse_int_param(request.GET.get("department"))
+    if dept_int_id is not None:
+        qs = qs.filter(department_id=dept_int_id)
 
     stats = qs.aggregate(
         total_count=Count("id"),
@@ -93,8 +97,7 @@ def process_definition_list(request):
         active_count=Count("id", filter=Q(is_active=True)),
     )
 
-    paginator = Paginator(qs, 15)
-    page_obj = paginator.get_page(request.GET.get("page"))
+    page_obj = paginate_queryset(qs, request, per_page=15)
 
     departments = (
         OrgUnit.objects.filter(tenant=request.tenant)
