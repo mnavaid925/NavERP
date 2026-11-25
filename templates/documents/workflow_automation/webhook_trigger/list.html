@@ -145,16 +145,16 @@
                     <td><span class="badge {{ wh.last_status_badge }}">{{ wh.get_last_status_display }}</span></td>
                     <td><span class="badge {{ wh.active_badge }}">{% if wh.is_active %}Active{% else %}Paused{% endif %}</span></td>
                     <td class="table-actions text-right">
-                        <a href="{% url 'documents:webhook_trigger_detail' wh.pk %}" class="btn btn-icon btn-outline" title="Inspect Webhook" aria-label="View {{ wh.number }}">
+                        <a href="{% url 'documents:webhook_trigger_detail' wh.pk %}" class="btn btn-icon" title="Inspect Webhook" aria-label="View {{ wh.number }}">
                             <i data-lucide="eye"></i>
                         </a>
-                        <a href="{% url 'documents:webhook_trigger_edit' wh.pk %}" class="btn btn-icon btn-outline" title="Edit Webhook" aria-label="Edit {{ wh.number }}">
+                        <a href="{% url 'documents:webhook_trigger_edit' wh.pk %}" class="btn btn-icon" title="Edit Webhook" aria-label="Edit {{ wh.number }}">
                             <i data-lucide="pencil"></i>
                         </a>
                         {% if user.is_superuser or user.is_tenant_admin %}
                         <form method="post" action="{% url 'documents:webhook_trigger_delete' wh.pk %}" class="inline" onsubmit="return confirm('Delete webhook trigger {{ wh.number }}?');">
                             {% csrf_token %}
-                            <button type="submit" class="btn btn-icon btn-danger" title="Delete Webhook" aria-label="Delete {{ wh.number }}">
+                            <button type="submit" class="btn btn-icon danger" title="Delete Webhook" aria-label="Delete {{ wh.number }}">
                                 <i data-lucide="trash-2"></i>
                             </button>
                         </form>
