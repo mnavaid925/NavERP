@@ -42,36 +42,62 @@ class DocumentProcessInstanceForm(TenantUniqueMixin, TenantModelForm):
         super().__init__(*args, **kwargs)
         User = get_user_model()
         if self.tenant:
+            scoped_doc_id = None
             if self.instance and self.instance.pk:
                 if self.instance.process_definition_id:
-                    self.fields["process_definition"].queryset = DocumentProcessDefinition.objects.filter(
-                        tenant=self.tenant, pk=self.instance.process_definition_id
+                    self.fields["process_definition"].queryset = (
+                        DocumentProcessDefinition.objects.filter(
+                            tenant=self.tenant, pk=self.instance.process_definition_id
+                        ).only("id", "number", "code", "name", "version_number", "tenant_id")
                     )
                 self.fields["process_definition"].disabled = True
                 if self.instance.document_id:
-                    self.fields["document"].queryset = Document.objects.filter(
-                        tenant=self.tenant, pk=self.instance.document_id
+                    scoped_doc_id = self.instance.document_id
+                    self.fields["document"].queryset = (
+                        Document.objects.filter(tenant=self.tenant, pk=self.instance.document_id)
+                        .only("id", "number", "title", "current_version_label", "created_at", "tenant_id")
                     )
                 self.fields["document"].disabled = True
             else:
-                self.fields["process_definition"].queryset = DocumentProcessDefinition.objects.filter(
-                    tenant=self.tenant, status="published", is_active=True
-                ).order_by("code", "-version_number")
-                self.fields["document"].queryset = Document.objects.filter(
-                    tenant=self.tenant
-                ).order_by("-created_at", "title")
+                self.fields["process_definition"].queryset = (
+                    DocumentProcessDefinition.objects.filter(
+                        tenant=self.tenant, status="published", is_active=True
+                    )
+                    .only("id", "number", "code", "name", "version_number", "tenant_id")
+                    .order_by("code", "-version_number")
+                )
+                self.fields["document"].queryset = (
+                    Document.objects.filter(tenant=self.tenant)
+                    .only("id", "number", "title", "current_version_label", "created_at", "tenant_id")
+                    .order_by("-created_at", "title")
+                )
+                raw_doc = (
+                    (self.data.get(self.add_prefix("document")) if self.is_bound else None)
+                    or self.initial.get("document")
+                )
+                if raw_doc is not None:
+                    cand_doc_id = getattr(raw_doc, "pk", raw_doc)
+                    if str(cand_doc_id).strip().isdigit():
+                        scoped_doc_id = int(str(cand_doc_id).strip())
+
+            ver_qs = DocumentVersion.objects.filter(tenant=self.tenant)
+            if scoped_doc_id:
+                ver_qs = ver_qs.filter(document_id=scoped_doc_id)
             self.fields["version"].queryset = (
-                DocumentVersion.objects.filter(tenant=self.tenant)
-                .select_related("document")
-                .defer("extracted_text")
+                ver_qs.select_related("document")
+                .only("id", "number", "version_label", "document_id", "document__number", "created_at", "tenant_id")
                 .order_by("-created_at")
             )
-            self.fields["department"].queryset = OrgUnit.objects.filter(
-                tenant=self.tenant
-            ).order_by("name")
-            self.fields["current_assignee"].queryset = User.objects.filter(
-                tenant=self.tenant, is_active=True
-            ).order_by("username")
+            self.fields["department"].queryset = (
+                OrgUnit.objects.filter(tenant=self.tenant)
+                .only("id", "name", "tenant_id")
+                .order_by("name")
+            )
+            self.fields["current_assignee"].queryset = (
+                User.objects.filter(tenant=self.tenant, is_active=True)
+                .only("id", "username", "email", "first_name", "last_name", "tenant_id")
+                .order_by("username")
+            )
         else:
             self.fields["process_definition"].queryset = DocumentProcessDefinition.objects.none()
             self.fields["document"].queryset = Document.objects.none()
