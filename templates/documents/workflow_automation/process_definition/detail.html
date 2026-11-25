@@ -24,10 +24,12 @@
             <i data-lucide="workflow"></i>
             <span>Open Visual Designer</span>
         </a>
+        {% if process_def.status == 'published' and process_def.is_active %}
         <a href="{% url 'documents:process_instance_create' %}?process_definition={{ process_def.pk }}" class="btn btn-outline">
             <i data-lucide="play"></i>
             <span>Launch Instance</span>
         </a>
+        {% endif %}
     </div>
 </div>
 
@@ -213,17 +215,19 @@
                     <span>Back to Process List</span>
                 </a>
                 {% if process_def.status != 'archived' %}
+                {% if process_def.status != 'published' or user.is_superuser or user.is_tenant_admin %}
                 <a href="{% url 'documents:process_definition_edit' process_def.pk %}" class="btn btn-outline w-full justify-start">
                     <i data-lucide="pencil"></i>
                     <span>Edit Blueprint</span>
                 </a>
+                {% endif %}
                 {% endif %}
                 <a href="{% url 'documents:process_definition_designer' process_def.pk %}" class="btn btn-outline w-full justify-start">
                     <i data-lucide="workflow"></i>
                     <span>Visual Swimlane Designer</span>
                 </a>
                 {% if user.is_superuser or user.is_tenant_admin %}
-                {% if process_def.status != 'published' %}
+                {% if process_def.status == 'draft' or process_def.status == 'deprecated' %}
                 <form method="post" action="{% url 'documents:process_definition_publish' process_def.pk %}">
                     {% csrf_token %}
                     <button type="submit" class="btn btn-primary w-full justify-start">
