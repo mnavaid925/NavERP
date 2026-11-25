@@ -237,7 +237,7 @@
                 </form>
                 {% endif %}
                 {% if process_def.status == 'published' %}
-                <form method="post" action="{% url 'documents:process_definition_deprecate' process_def.pk %}">
+                <form method="post" action="{% url 'documents:process_definition_deprecate' process_def.pk %}" onsubmit="return confirm('Deprecate process blueprint {{ process_def.number }}? New instances will be blocked.');">
                     {% csrf_token %}
                     <button type="submit" class="btn btn-outline w-full justify-start">
                         <i data-lucide="archive"></i>
@@ -245,7 +245,7 @@
                     </button>
                 </form>
                 {% endif %}
-                {% if process_def.status == 'draft' and not recent_instances %}
+                {% if process_def.status == 'draft' and process_def.instance_count == 0 and not recent_instances %}
                 <form method="post" action="{% url 'documents:process_definition_delete' process_def.pk %}" onsubmit="return confirm('Delete process definition {{ process_def.number }}?');">
                     {% csrf_token %}
                     <button type="submit" class="btn btn-danger w-full justify-start">
