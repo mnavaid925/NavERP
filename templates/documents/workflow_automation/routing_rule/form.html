@@ -132,15 +132,17 @@
                         {{ form.core_rule_ref }}
                         {% if form.core_rule_ref.errors %}<div class="form-error">{{ form.core_rule_ref.errors }}</div>{% endif %}
                     </div>
-                    <div class="form-group flex items-center gap-6 pt-6">
-                        <label class="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
+                    <div class="form-group flex-row items-center flex-wrap gap-6 pt-6">
+                        <label class="inline-flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200 cursor-pointer">
                             {{ form.is_active }}
                             <span>Active</span>
                         </label>
-                        <label class="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
+                        {% if form.is_active.errors %}<div class="form-error">{{ form.is_active.errors }}</div>{% endif %}
+                        <label class="inline-flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200 cursor-pointer">
                             {{ form.else_branch_enabled }}
                             <span>Enable Else Fallback</span>
                         </label>
+                        {% if form.else_branch_enabled.errors %}<div class="form-error">{{ form.else_branch_enabled.errors }}</div>{% endif %}
                     </div>
                 </div>
 
