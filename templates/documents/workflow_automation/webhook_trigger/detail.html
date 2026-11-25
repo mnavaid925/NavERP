@@ -23,11 +23,11 @@
 </div>
 
 {% if revealed_secret %}
-<div class="card mb-6 border-amber-300 bg-amber-50">
+<div class="card mb-6 border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/50">
     <div class="card-body">
-        <div class="font-semibold text-amber-900 text-sm mb-1">HMAC-SHA256 Signing Secret (Displayed Once)</div>
-        <p class="text-xs text-amber-800 mb-2">Copy and store this signing secret now. It will not be displayed again after you refresh or leave this page.</p>
-        <div class="font-mono text-xs bg-white p-3 rounded border border-amber-200 select-all break-all">{{ revealed_secret }}</div>
+        <div class="font-semibold text-amber-900 dark:text-amber-100 text-sm mb-1">HMAC-SHA256 Signing Secret (Displayed Once)</div>
+        <p class="text-xs text-amber-800 dark:text-amber-200 mb-2">Copy and store this signing secret now. It will not be displayed again after you refresh or leave this page.</p>
+        <div class="font-mono text-xs bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 p-3 rounded border border-amber-200 dark:border-amber-700 select-all break-all">{{ revealed_secret }}</div>
     </div>
 </div>
 {% endif %}
@@ -36,7 +36,7 @@
     <div class="lg:col-span-2 space-y-6">
         <div class="card">
             <div class="card-header">
-                <h2 class="text-base font-semibold text-slate-800">Trigger &amp; Security Configuration</h2>
+                <h2 class="text-base font-semibold text-slate-800 dark:text-slate-100">Trigger &amp; Security Configuration</h2>
             </div>
             <div class="card-body">
                 <dl class="detail-grid">
@@ -68,7 +68,7 @@
                         <dt>Linked Process Blueprint</dt>
                         <dd>
                             {% if webhook.process_definition %}
-                            <a href="{% url 'documents:process_definition_detail' webhook.process_definition.pk %}" class="text-blue-600 hover:underline">{{ webhook.process_definition.name }}</a>
+                            <a href="{% url 'documents:process_definition_detail' webhook.process_definition.pk %}" class="text-blue-600 dark:text-blue-400 hover:underline">{{ webhook.process_definition.name }}</a>
                             {% else %}—{% endif %}
                         </dd>
                     </div>
@@ -86,9 +86,9 @@
                     </div>
                 </dl>
                 {% if webhook.description %}
-                <div class="mt-4 pt-4 border-t border-slate-100">
-                    <h3 class="text-xs font-semibold uppercase text-slate-500 mb-1">Description</h3>
-                    <p class="text-sm text-slate-700 whitespace-pre-line">{{ webhook.description }}</p>
+                <div class="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700">
+                    <h3 class="text-xs font-semibold uppercase text-slate-500 dark:text-slate-400 mb-1">Description</h3>
+                    <p class="text-sm text-slate-700 dark:text-slate-200 whitespace-pre-line">{{ webhook.description }}</p>
                 </div>
                 {% endif %}
             </div>
@@ -96,7 +96,7 @@
 
         <div class="card">
             <div class="card-header">
-                <h2 class="text-base font-semibold text-slate-800">Simulated Delivery Log (Latest {{ delivery_history|length }})</h2>
+                <h2 class="text-base font-semibold text-slate-800 dark:text-slate-100">Simulated Delivery Log (Latest {{ delivery_history|length }})</h2>
             </div>
             <div class="table-wrap">
                 <table class="table">
@@ -112,14 +112,14 @@
                     <tbody>
                         {% for entry in delivery_history %}
                         <tr>
-                            <td class="text-xs font-mono text-slate-500">{{ entry.timestamp|truncatechars:19 }}</td>
+                            <td class="text-xs font-mono text-slate-500 dark:text-slate-400">{{ entry.timestamp|truncatechars:19 }}</td>
                             <td class="text-xs font-mono">{{ entry.event }}</td>
                             <td><span class="badge badge-info">{{ entry.status }}</span></td>
-                            <td class="text-xs font-mono text-slate-600">{{ entry.signature_header|default:"—" }}</td>
-                            <td class="text-xs font-mono text-slate-600">{{ entry.payload|truncatechars:70 }}</td>
+                            <td class="text-xs font-mono text-slate-600 dark:text-slate-300">{{ entry.signature_header|default:"—" }}</td>
+                            <td class="text-xs font-mono text-slate-600 dark:text-slate-300">{{ entry.payload|truncatechars:70 }}</td>
                         </tr>
                         {% empty %}
-                        <tr><td colspan="5" class="text-center text-xs text-slate-500 py-4">No simulated deliveries recorded yet. Send a test ping to inspect the signed payload envelope.</td></tr>
+                        <tr><td colspan="5" class="text-center text-xs text-slate-500 dark:text-slate-400 py-4">No simulated deliveries recorded yet. Send a test ping to inspect the signed payload envelope.</td></tr>
                         {% endfor %}
                     </tbody>
                 </table>
@@ -130,7 +130,7 @@
     <div class="space-y-6">
         <div class="card">
             <div class="card-header">
-                <h2 class="text-base font-semibold text-slate-800">Send Simulated Test Ping</h2>
+                <h2 class="text-base font-semibold text-slate-800 dark:text-slate-100">Send Simulated Test Ping</h2>
             </div>
             <div class="card-body">
                 <form method="post" action="{% url 'documents:webhook_trigger_test_ping' webhook.pk %}" class="space-y-3">
@@ -154,7 +154,7 @@
         {% if webhook.process_definition %}
         <div class="card">
             <div class="card-header">
-                <h2 class="text-base font-semibold text-slate-800">Simulate Inbound Trigger</h2>
+                <h2 class="text-base font-semibold text-slate-800 dark:text-slate-100">Simulate Inbound Trigger</h2>
             </div>
             <div class="card-body">
                 <form method="post" action="{% url 'documents:webhook_trigger_simulate_inbound' webhook.pk %}" class="space-y-3">
@@ -179,7 +179,7 @@
 
         <div class="card">
             <div class="card-header">
-                <h2 class="text-base font-semibold text-slate-800">Actions</h2>
+                <h2 class="text-base font-semibold text-slate-800 dark:text-slate-100">Actions</h2>
             </div>
             <div class="card-body space-y-2">
                 <a href="{% url 'documents:webhook_trigger_list' %}" class="btn btn-outline w-full justify-start">
