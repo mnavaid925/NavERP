@@ -167,9 +167,11 @@
                             <i data-lucide="workflow"></i>
                         </a>
                         {% if proc.status != 'archived' %}
+                        {% if proc.status != 'published' or user.is_superuser or user.is_tenant_admin %}
                         <a href="{% url 'documents:process_definition_edit' proc.pk %}" class="btn btn-icon" title="Edit Blueprint" aria-label="Edit {{ proc.number }}">
                             <i data-lucide="pencil"></i>
                         </a>
+                        {% endif %}
                         {% endif %}
                         {% if proc.status == 'draft' %}
                         {% if user.is_superuser or user.is_tenant_admin %}
