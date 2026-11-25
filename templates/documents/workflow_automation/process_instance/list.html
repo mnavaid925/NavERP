@@ -15,7 +15,7 @@
         </div>
         <h1 class="page-title">Process Execution Instances</h1>
     </div>
-    <div class="page-actions">
+    <div class="page-actions flex-wrap">
         <a href="{% url 'documents:process_analytics_dashboard' %}" class="btn btn-outline">
             <i data-lucide="bar-chart-3"></i>
             <span>Analytics &amp; Mining</span>
@@ -60,12 +60,12 @@
 
 <div class="card mb-6">
     <div class="card-body">
-        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
-            <div class="form-group">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 items-end">
+            <div class="form-group mb-0">
                 <label class="form-label" for="id_q">Search</label>
                 <input type="text" id="id_q" name="q" value="{{ q }}" placeholder="DPIN-, document, node..." class="form-input w-full">
             </div>
-            <div class="form-group">
+            <div class="form-group mb-0">
                 <label class="form-label" for="id_status">Status</label>
                 <select id="id_status" name="status" class="form-select w-full">
                     <option value="">All Statuses</option>
@@ -74,7 +74,7 @@
                     {% endfor %}
                 </select>
             </div>
-            <div class="form-group">
+            <div class="form-group mb-0">
                 <label class="form-label" for="id_process_definition">Process</label>
                 <select id="id_process_definition" name="process_definition" class="form-select w-full">
                     <option value="">All Processes</option>
@@ -83,7 +83,7 @@
                     {% endfor %}
                 </select>
             </div>
-            <div class="form-group">
+            <div class="form-group mb-0">
                 <label class="form-label" for="id_department">Department</label>
                 <select id="id_department" name="department" class="form-select w-full">
                     <option value="">All Departments</option>
@@ -92,7 +92,7 @@
                     {% endfor %}
                 </select>
             </div>
-            <div class="form-group">
+            <div class="form-group mb-0">
                 <label class="form-label" for="id_sla_breached">SLA Health</label>
                 <select id="id_sla_breached" name="sla_breached" class="form-select w-full">
                     <option value="">All</option>
@@ -125,7 +125,7 @@
                     <th>Duration &amp; Rework</th>
                     <th>SLA</th>
                     <th>Status</th>
-                    <th class="text-right">Actions</th>
+                    <th class="text-end">Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -163,25 +163,27 @@
                     <td>
                         <span class="badge {{ inst.status_badge }}">{{ inst.get_status_display }}</span>
                     </td>
-                    <td class="table-actions text-right">
-                        <a href="{% url 'documents:process_instance_detail' inst.pk %}" class="btn btn-icon" title="Inspect Instance" aria-label="View {{ inst.number }}">
-                            <i data-lucide="eye"></i>
-                        </a>
-                        {% if inst.status != 'completed' and inst.status != 'cancelled' %}
-                        <a href="{% url 'documents:process_instance_edit' inst.pk %}" class="btn btn-icon" title="Edit Instance" aria-label="Edit {{ inst.number }}">
-                            <i data-lucide="pencil"></i>
-                        </a>
-                        {% endif %}
-                        {% if inst.status == 'queued' or inst.status == 'cancelled' or inst.status == 'failed' %}
-                        {% if user.is_superuser or user.is_tenant_admin %}
-                        <form method="post" action="{% url 'documents:process_instance_delete' inst.pk %}" class="inline" onsubmit="return confirm('Delete process instance {{ inst.number }}?');">
-                            {% csrf_token %}
-                            <button type="submit" class="btn btn-icon danger" title="Delete Instance" aria-label="Delete {{ inst.number }}">
-                                <i data-lucide="trash-2"></i>
-                            </button>
-                        </form>
-                        {% endif %}
-                        {% endif %}
+                    <td class="text-end">
+                        <div class="table-actions">
+                            <a href="{% url 'documents:process_instance_detail' inst.pk %}" class="btn btn-icon" title="Inspect Instance" aria-label="View {{ inst.number }}">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            {% if inst.status != 'completed' and inst.status != 'cancelled' %}
+                            <a href="{% url 'documents:process_instance_edit' inst.pk %}" class="btn btn-icon" title="Edit Instance" aria-label="Edit {{ inst.number }}">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            {% endif %}
+                            {% if inst.status == 'queued' or inst.status == 'cancelled' or inst.status == 'failed' %}
+                            {% if user.is_superuser or user.is_tenant_admin %}
+                            <form method="post" action="{% url 'documents:process_instance_delete' inst.pk %}" class="inline" onsubmit="return confirm('Delete process instance {{ inst.number }}?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon danger" title="Delete Instance" aria-label="Delete {{ inst.number }}">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                            {% endif %}
+                            {% endif %}
+                        </div>
                     </td>
                 </tr>
                 {% empty %}
@@ -201,7 +203,7 @@
     </div>
     {% if page_obj.has_other_pages %}
     <div class="pagination">
-        <span class="text-xs text-slate-500">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+        <span class="muted">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
         <div class="flex items-center gap-2">
             {% if page_obj.has_previous %}
             <a href="?page={{ page_obj.previous_page_number }}&q={{ q|urlencode }}&status={{ status|urlencode }}&process_definition={{ process_definition|urlencode }}&department={{ department|urlencode }}&sla_breached={{ sla_breached|urlencode }}" class="btn btn-outline btn-sm">Previous</a>
