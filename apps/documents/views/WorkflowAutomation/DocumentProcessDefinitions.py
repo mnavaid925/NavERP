@@ -2,6 +2,7 @@ import json
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Q
@@ -182,12 +183,18 @@ def process_definition_create(request):
     return render(request, "documents/workflow_automation/process_definition/form.html", context)
 
 
+def _is_tenant_admin(user):
+    return bool(user.is_superuser or getattr(user, "is_tenant_admin", False))
+
+
 @login_required
 def process_definition_edit(request, pk):
     process_def = documents_object(request, DocumentProcessDefinition, pk)
     if process_def.status == "archived":
         messages.warning(request, "Archived process definitions cannot be edited.")
         return redirect("documents:process_definition_detail", pk=process_def.pk)
+    if process_def.status == "published" and not _is_tenant_admin(request.user):
+        raise PermissionDenied("Tenant administrator access required to edit published process definitions.")
 
     if request.method == "POST":
         form = DocumentProcessDefinitionForm(request.POST, instance=process_def, tenant=request.tenant)
@@ -244,10 +251,15 @@ def process_definition_designer(request, pk):
         pk,
         select_related=("owner", "department", "target_folder"),
     )
+    can_edit_designer = process_def.status != "archived" and (
+        process_def.status != "published" or _is_tenant_admin(request.user)
+    )
     if request.method == "POST":
         if process_def.status == "archived":
             messages.error(request, "Archived process definitions cannot be modified in the designer.")
             return redirect("documents:process_definition_designer", pk=process_def.pk)
+        if process_def.status == "published" and not _is_tenant_admin(request.user):
+            raise PermissionDenied("Tenant administrator access required to modify published BPMN blueprints.")
 
         designer_form = ProcessDesignerForm(request.POST)
         if designer_form.is_valid():
@@ -272,12 +284,26 @@ def process_definition_designer(request, pk):
     simulation_steps = simulate_process_path(process_def, context={"classification": "confidential"})
     roles = Role.objects.filter(tenant=request.tenant).order_by("name")
     departments = OrgUnit.objects.filter(tenant=request.tenant).order_by("name")
+    swimlanes = process_def.swimlanes_json or []
+    nodes = process_def.nodes_json or []
+    lane_ids = {
+        str(lane.get("id") or "").strip()
+        for lane in swimlanes
+        if isinstance(lane, dict) and lane.get("id")
+    }
+    unassigned_nodes = [
+        node
+        for node in nodes
+        if isinstance(node, dict) and str(node.get("lane_id") or "").strip() not in lane_ids
+    ]
 
     context = {
         "process_def": process_def,
         "designer_form": designer_form,
-        "swimlanes": process_def.swimlanes_json or [],
-        "nodes": process_def.nodes_json or [],
+        "can_edit_designer": can_edit_designer,
+        "swimlanes": swimlanes,
+        "nodes": nodes,
+        "unassigned_nodes": unassigned_nodes,
         "transitions": process_def.transitions_json or [],
         "validation_result": validation_result,
         "simulation_steps": simulation_steps,
@@ -292,6 +318,13 @@ def process_definition_designer(request, pk):
 @tenant_admin_required
 def process_definition_publish(request, pk):
     process_def = documents_object(request, DocumentProcessDefinition, pk)
+    if process_def.status == "archived":
+        messages.error(request, "Archived process definitions cannot be published.")
+        return redirect("documents:process_definition_detail", pk=process_def.pk)
+    if process_def.status == "published":
+        messages.info(request, f"Process definition {process_def.number} is already published.")
+        return redirect("documents:process_definition_detail", pk=process_def.pk)
+
     validation = process_def.validate_graph()
     if not validation["is_valid"]:
         messages.error(request, f"Cannot publish invalid BPMN graph: {'; '.join(validation['errors'])}")
@@ -312,6 +345,9 @@ def process_definition_publish(request, pk):
 @tenant_admin_required
 def process_definition_deprecate(request, pk):
     process_def = documents_object(request, DocumentProcessDefinition, pk)
+    if process_def.status != "published":
+        messages.error(request, "Only published process definitions can be deprecated.")
+        return redirect("documents:process_definition_detail", pk=process_def.pk)
     with transaction.atomic():
         process_def.status = "deprecated"
         process_def.is_active = False
