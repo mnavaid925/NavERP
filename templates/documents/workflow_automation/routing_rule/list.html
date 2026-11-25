@@ -15,7 +15,7 @@
         </div>
         <h1 class="page-title">Document Routing &amp; Business Rules</h1>
     </div>
-    <div class="page-actions">
+    <div class="page-actions flex-wrap">
         <a href="{% url 'documents:routing_rule_simulator' %}" class="btn btn-outline">
             <i data-lucide="flask-conical"></i>
             <span>Rule Simulator</span>
@@ -55,12 +55,12 @@
 
 <div class="card mb-6">
     <div class="card-body">
-        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-4">
-            <div class="form-group">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-4 items-end">
+            <div class="form-group mb-0">
                 <label class="form-label" for="id_q">Search</label>
                 <input type="text" id="id_q" name="q" value="{{ q }}" placeholder="Rule name or DRUL-..." class="form-input w-full">
             </div>
-            <div class="form-group">
+            <div class="form-group mb-0">
                 <label class="form-label" for="id_rule_type">Rule Type</label>
                 <select id="id_rule_type" name="rule_type" class="form-select w-full">
                     <option value="">All Types</option>
@@ -69,7 +69,7 @@
                     {% endfor %}
                 </select>
             </div>
-            <div class="form-group">
+            <div class="form-group mb-0">
                 <label class="form-label" for="id_trigger_event">Trigger</label>
                 <select id="id_trigger_event" name="trigger_event" class="form-select w-full">
                     <option value="">All Triggers</option>
@@ -78,7 +78,7 @@
                     {% endfor %}
                 </select>
             </div>
-            <div class="form-group">
+            <div class="form-group mb-0">
                 <label class="form-label" for="id_route_action">Action</label>
                 <select id="id_route_action" name="route_action" class="form-select w-full">
                     <option value="">All Actions</option>
@@ -87,7 +87,7 @@
                     {% endfor %}
                 </select>
             </div>
-            <div class="form-group">
+            <div class="form-group mb-0">
                 <label class="form-label" for="id_process_definition">Process</label>
                 <select id="id_process_definition" name="process_definition" class="form-select w-full">
                     <option value="">All Processes</option>
@@ -96,7 +96,7 @@
                     {% endfor %}
                 </select>
             </div>
-            <div class="form-group">
+            <div class="form-group mb-0">
                 <label class="form-label" for="id_status">State</label>
                 <select id="id_status" name="status" class="form-select w-full">
                     <option value="">All States</option>
@@ -129,7 +129,7 @@
                     <th>Action Target</th>
                     <th>Matches / Runs</th>
                     <th>State</th>
-                    <th class="text-right">Actions</th>
+                    <th class="text-end">Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -151,8 +151,18 @@
                         <span class="badge {{ rule.route_action_badge }}">{{ rule.get_route_action_display }}</span>
                         {% if rule.destination_folder %}
                         <div class="text-xs text-slate-500 dark:text-slate-400 font-mono mt-0.5">{{ rule.destination_folder.path }}</div>
-                        {% elif rule.route_to_org_unit %}
-                        <div class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{{ rule.route_to_org_unit.name }}</div>
+                        {% endif %}
+                        {% if rule.route_to_org_unit %}
+                        <div class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">OrgUnit: {{ rule.route_to_org_unit.name }}</div>
+                        {% endif %}
+                        {% if rule.route_to_role %}
+                        <div class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Role: {{ rule.route_to_role.name }}</div>
+                        {% endif %}
+                        {% if rule.route_to_user %}
+                        <div class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">User: {{ rule.route_to_user.get_full_name|default:rule.route_to_user.username }}</div>
+                        {% endif %}
+                        {% if rule.route_action == 'trigger_process' and rule.process_definition %}
+                        <div class="text-xs text-slate-500 dark:text-slate-400 font-mono mt-0.5">{{ rule.process_definition.code }} v{{ rule.process_definition.version_number }}</div>
                         {% endif %}
                     </td>
                     <td class="text-xs font-mono text-slate-700 dark:text-slate-200">{{ rule.match_count }} / {{ rule.execution_count }} ({{ rule.match_rate_pct }}%)</td>
@@ -161,24 +171,26 @@
                             {% if rule.is_active %}Active{% else %}Paused{% endif %}
                         </span>
                     </td>
-                    <td class="table-actions text-right">
-                        <a href="{% url 'documents:routing_rule_detail' rule.pk %}" class="btn btn-icon" title="View Rule" aria-label="View {{ rule.number }}">
-                            <i data-lucide="eye"></i>
-                        </a>
-                        <a href="{% url 'documents:routing_rule_simulator' %}?rule={{ rule.pk }}" class="btn btn-icon" title="Test in Simulator" aria-label="Simulate {{ rule.number }}">
-                            <i data-lucide="flask-conical"></i>
-                        </a>
-                        {% if user.is_superuser or user.is_tenant_admin %}
-                        <a href="{% url 'documents:routing_rule_edit' rule.pk %}" class="btn btn-icon" title="Edit Rule" aria-label="Edit {{ rule.number }}">
-                            <i data-lucide="pencil"></i>
-                        </a>
-                        <form method="post" action="{% url 'documents:routing_rule_delete' rule.pk %}" class="inline" onsubmit="return confirm('Delete routing rule {{ rule.number }}?');">
-                            {% csrf_token %}
-                            <button type="submit" class="btn btn-icon danger" title="Delete Rule" aria-label="Delete {{ rule.number }}">
-                                <i data-lucide="trash-2"></i>
-                            </button>
-                        </form>
-                        {% endif %}
+                    <td class="text-end">
+                        <div class="table-actions">
+                            <a href="{% url 'documents:routing_rule_detail' rule.pk %}" class="btn btn-icon" title="View Rule" aria-label="View {{ rule.number }}">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'documents:routing_rule_simulator' %}?rule={{ rule.pk }}" class="btn btn-icon" title="Test in Simulator" aria-label="Simulate {{ rule.number }}">
+                                <i data-lucide="flask-conical"></i>
+                            </a>
+                            {% if user.is_superuser or user.is_tenant_admin %}
+                            <a href="{% url 'documents:routing_rule_edit' rule.pk %}" class="btn btn-icon" title="Edit Rule" aria-label="Edit {{ rule.number }}">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form method="post" action="{% url 'documents:routing_rule_delete' rule.pk %}" class="inline" onsubmit="return confirm('Delete routing rule {{ rule.number }}?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon danger" title="Delete Rule" aria-label="Delete {{ rule.number }}">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                            {% endif %}
+                        </div>
                     </td>
                 </tr>
                 {% empty %}
@@ -200,7 +212,7 @@
     </div>
     {% if page_obj.has_other_pages %}
     <div class="pagination">
-        <span class="text-xs text-slate-500">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+        <span class="muted">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
         <div class="flex items-center gap-2">
             {% if page_obj.has_previous %}
             <a href="?page={{ page_obj.previous_page_number }}&q={{ q|urlencode }}&rule_type={{ rule_type|urlencode }}&trigger_event={{ trigger_event|urlencode }}&route_action={{ route_action|urlencode }}&status={{ status|urlencode }}&process_definition={{ process_definition|urlencode }}" class="btn btn-outline btn-sm">Previous</a>
