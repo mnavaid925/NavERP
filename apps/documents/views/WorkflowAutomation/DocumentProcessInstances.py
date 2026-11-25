@@ -5,7 +5,7 @@ from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import F, Q
 from django.shortcuts import redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
@@ -239,9 +239,14 @@ def process_instance_delete(request, pk):
         return redirect("documents:process_instance_detail", pk=instance.pk)
 
     number = instance.number
+    proc_def_id = instance.process_definition_id
     with transaction.atomic():
         write_audit_log(request.user, instance, "delete", tenant=request.tenant)
         instance.delete()
+        if proc_def_id:
+            DocumentProcessDefinition.objects.filter(
+                pk=proc_def_id, instance_count__gt=0
+            ).update(instance_count=F("instance_count") - 1)
     messages.success(request, f"Process instance {number} deleted.")
     return redirect("documents:process_instance_list")
 
