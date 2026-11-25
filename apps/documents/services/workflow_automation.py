@@ -1101,10 +1101,12 @@ def evaluate_routing_rules(
             scope_ok = False
             scope_reasons.append(f"classification '{document.classification}' != '{rule.target_classification}'")
         if rule.source_folder_id:
-            folder_slug = rule.source_folder.slug
-            tags_lower = (document.tags or "").lower()
+            folder_slug = (rule.source_folder.slug or "").strip().lower()
+            tag_set = {t.strip().lower() for t in (document.tags or "").split(",") if t.strip()}
             routed_path = doc_ctx["metadata"].get("routed_folder_path", "")
-            if folder_slug not in tags_lower and rule.source_folder.path != routed_path:
+            slug_matched = bool(folder_slug) and folder_slug in tag_set
+            path_matched = bool(rule.source_folder.path) and rule.source_folder.path == routed_path
+            if not slug_matched and not path_matched:
                 scope_ok = False
                 scope_reasons.append(f"document not filed in source folder '{rule.source_folder.name}'")
 
@@ -1336,6 +1338,9 @@ def evaluate_routing_rules(
                                     "changes": applied_actions,
                                 },
                             )
+
+        if apply_mutations and applied_actions:
+            doc_ctx = build_document_context(tenant, document)
 
         results.append(
             {
