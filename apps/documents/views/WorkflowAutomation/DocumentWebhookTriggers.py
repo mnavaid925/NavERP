@@ -3,7 +3,6 @@ import json
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
-from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Count, Q, Sum
 from django.shortcuts import redirect, render
@@ -23,7 +22,12 @@ from apps.documents.services.workflow_automation import (
     dispatch_simulated_webhook,
     start_process_instance,
 )
-from apps.documents.views._common import documents_object, documents_scope
+from apps.documents.views._common import (
+    documents_object,
+    documents_scope,
+    paginate_queryset,
+    parse_int_param,
+)
 
 
 @login_required
@@ -73,8 +77,7 @@ def webhook_trigger_list(request):
         total_fires=Sum("fire_count"),
     )
 
-    paginator = Paginator(qs, 15)
-    page_obj = paginator.get_page(request.GET.get("page"))
+    page_obj = paginate_queryset(qs, request, per_page=15)
 
     context = {
         "webhooks": page_obj.object_list,
@@ -272,10 +275,11 @@ def webhook_trigger_simulate_inbound(request, pk):
     doc_id = request.POST.get("document_id", "").strip()
     doc = None
     if doc_id:
-        if not doc_id.isdigit():
+        _, parsed_doc_id = parse_int_param(doc_id)
+        if parsed_doc_id is None:
             messages.error(request, "Invalid target document identifier.")
             return redirect("documents:webhook_trigger_detail", pk=webhook.pk)
-        doc = Document.objects.filter(tenant=request.tenant, pk=int(doc_id)).first()
+        doc = Document.objects.filter(tenant=request.tenant, pk=parsed_doc_id).first()
         if doc is None:
             messages.error(request, "Selected target document was not found in this workspace.")
             return redirect("documents:webhook_trigger_detail", pk=webhook.pk)
