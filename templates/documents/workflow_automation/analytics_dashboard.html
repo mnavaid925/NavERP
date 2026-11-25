@@ -15,7 +15,7 @@
         </div>
         <h1 class="page-title">Process Performance &amp; Mining Analytics</h1>
     </div>
-    <div class="page-actions">
+    <div class="page-actions flex-wrap">
         <a href="{% url 'documents:process_definition_list' %}" class="btn btn-outline">
             <i data-lucide="git-branch"></i>
             <span>Process Blueprints</span>
@@ -29,8 +29,8 @@
 
 <div class="card mb-6">
     <div class="card-body">
-        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-            <div class="form-group">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 items-end">
+            <div class="form-group mb-0">
                 <label class="form-label" for="id_process_definition">Process Blueprint</label>
                 <select id="id_process_definition" name="process_definition" class="form-select w-full">
                     <option value="">All Blueprints</option>
@@ -39,7 +39,7 @@
                     {% endfor %}
                 </select>
             </div>
-            <div class="form-group">
+            <div class="form-group mb-0">
                 <label class="form-label" for="id_department">Department</label>
                 <select id="id_department" name="department" class="form-select w-full">
                     <option value="">All Departments</option>
@@ -48,11 +48,11 @@
                     {% endfor %}
                 </select>
             </div>
-            <div class="form-group">
+            <div class="form-group mb-0">
                 <label class="form-label" for="id_date_from">Started From</label>
                 <input type="date" id="id_date_from" name="date_from" value="{{ date_from }}" class="form-input w-full">
             </div>
-            <div class="form-group">
+            <div class="form-group mb-0">
                 <label class="form-label" for="id_date_to">Started To</label>
                 <input type="date" id="id_date_to" name="date_to" value="{{ date_to }}" class="form-input w-full">
             </div>
@@ -74,14 +74,14 @@
         <div class="stat-icon blue"><i data-lucide="layers"></i></div>
         <div>
             <div class="stat-value">{{ analytics.total_instances }}</div>
-            <div class="stat-label">Total Instances ({{ analytics.active_wip }} WIP)</div>
+            <div class="stat-label">{{ analytics.completed_count }} Completed · {{ analytics.active_wip }} WIP</div>
         </div>
     </div>
     <div class="stat-card">
         <div class="stat-icon green"><i data-lucide="clock"></i></div>
         <div>
             <div class="stat-value">{{ analytics.avg_cycle_minutes }}m</div>
-            <div class="stat-label">Avg Cycle (P95: {{ analytics.p95_cycle_minutes }}m)</div>
+            <div class="stat-label">Avg Cycle (Med: {{ analytics.median_cycle_minutes }}m · P95: {{ analytics.p95_cycle_minutes }}m)</div>
         </div>
     </div>
     <div class="stat-card">
@@ -156,8 +156,11 @@
                 <tbody>
                     {% for v in analytics.variants %}
                     <tr>
-                        <td class="font-mono text-xs text-slate-700 dark:text-slate-200">{{ v.signature }}</td>
-                        <td class="text-xs font-mono">{{ v.count }} ({{ v.pct }}%)</td>
+                        <td class="font-mono text-xs text-slate-700 dark:text-slate-200 break-words max-w-xs">{{ v.signature }}</td>
+                        <td class="text-xs font-mono">
+                            <div>{{ v.count }} ({{ v.pct }}%)</div>
+                            <div class="progress mt-1 w-24"><div class="progress-bar" style="width: {{ v.pct|floatformat:0 }}%"></div></div>
+                        </td>
                         <td class="text-xs font-mono">{{ v.avg_cycle_minutes }}m</td>
                         <td>
                             <span class="badge {% if v.rework_count > 0 %}badge-red{% else %}badge-slate{% endif %}">{{ v.rework_count }}</span>
@@ -202,7 +205,10 @@
                     <td><span class="badge {{ rule.route_action_badge }}">{{ rule.get_route_action_display }}</span></td>
                     <td class="text-xs font-mono">{{ rule.execution_count }}</td>
                     <td class="text-xs font-mono">{{ rule.match_count }}</td>
-                    <td class="text-xs font-mono">{{ rule.match_rate_pct }}%</td>
+                    <td class="text-xs font-mono">
+                        <div>{{ rule.match_rate_pct }}%</div>
+                        <div class="progress mt-1 w-24"><div class="progress-bar" style="width: {{ rule.match_rate_pct|floatformat:0 }}%"></div></div>
+                    </td>
                 </tr>
                 {% empty %}
                 <tr><td colspan="6" class="text-center text-xs text-slate-500 dark:text-slate-400 py-4">No routing rule telemetry recorded yet.</td></tr>
