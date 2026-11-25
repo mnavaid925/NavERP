@@ -2,6 +2,7 @@ import json
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Q, Sum
@@ -249,14 +250,30 @@ def webhook_trigger_simulate_inbound(request, pk):
         doc = Document.objects.filter(tenant=request.tenant, pk=int(doc_id)).first()
 
     if webhook.process_definition_id and doc is not None:
-        inst = start_process_instance(
-            tenant=request.tenant,
-            process_definition=webhook.process_definition,
-            document=doc,
-            actor=request.user,
-            context_variables={"inbound_webhook": webhook.number},
-            request=request,
-        )
+        try:
+            inst = start_process_instance(
+                tenant=request.tenant,
+                process_definition=webhook.process_definition,
+                document=doc,
+                actor=request.user,
+                context_variables={"inbound_webhook": webhook.number},
+                request=request,
+            )
+        except ValidationError as exc:
+            dispatch_simulated_webhook(
+                webhook,
+                "inbound.trigger",
+                {"note": f"Callback logged; process launch skipped ({exc.messages[0]})", "document": doc.number},
+                document=doc,
+                actor=request.user,
+                request=request,
+            )
+            write_audit_log(request.user, webhook, "inbound", tenant=request.tenant)
+            messages.warning(
+                request,
+                f"Simulated inbound callback logged, but linked blueprint could not launch: {exc.messages[0]}",
+            )
+            return redirect("documents:webhook_trigger_detail", pk=webhook.pk)
         dispatch_simulated_webhook(
             webhook,
             "inbound.trigger",
