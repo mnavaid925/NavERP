@@ -3,7 +3,6 @@ import json
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
-from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Count, F, Q
 from django.shortcuts import redirect, render
@@ -28,7 +27,12 @@ from apps.documents.services.workflow_automation import (
     cancel_process_instance,
     start_process_instance,
 )
-from apps.documents.views._common import documents_object, documents_scope
+from apps.documents.views._common import (
+    documents_object,
+    documents_scope,
+    paginate_queryset,
+    parse_int_param,
+)
 
 
 def _is_tenant_admin(user):
@@ -80,13 +84,13 @@ def process_instance_list(request):
     if status:
         qs = qs.filter(status=status)
 
-    process_definition_id = request.GET.get("process_definition", "").strip()
-    if process_definition_id and process_definition_id.isdigit():
-        qs = qs.filter(process_definition_id=int(process_definition_id))
+    process_definition_id, proc_int_id = parse_int_param(request.GET.get("process_definition"))
+    if proc_int_id is not None:
+        qs = qs.filter(process_definition_id=proc_int_id)
 
-    department_id = request.GET.get("department", "").strip()
-    if department_id and department_id.isdigit():
-        qs = qs.filter(department_id=int(department_id))
+    department_id, dept_int_id = parse_int_param(request.GET.get("department"))
+    if dept_int_id is not None:
+        qs = qs.filter(department_id=dept_int_id)
 
     sla_breached = request.GET.get("sla_breached", "").strip()
     if sla_breached == "1":
@@ -104,8 +108,7 @@ def process_instance_list(request):
         sla_breached_count=Count("id", filter=Q(is_sla_breached=True)),
     )
 
-    paginator = Paginator(qs, 15)
-    page_obj = paginator.get_page(request.GET.get("page"))
+    page_obj = paginate_queryset(qs, request, per_page=15)
 
     process_definitions = (
         DocumentProcessDefinition.objects.filter(tenant=request.tenant)
@@ -199,12 +202,12 @@ def process_instance_create(request):
             return redirect("documents:process_instance_detail", pk=instance.pk)
     else:
         initial = {}
-        proc_id = request.GET.get("process_definition", "").strip()
-        if proc_id and proc_id.isdigit():
-            initial["process_definition"] = int(proc_id)
-        doc_id = request.GET.get("document", "").strip()
-        if doc_id and doc_id.isdigit():
-            initial["document"] = int(doc_id)
+        _, proc_id = parse_int_param(request.GET.get("process_definition"))
+        if proc_id is not None:
+            initial["process_definition"] = proc_id
+        _, doc_id = parse_int_param(request.GET.get("document"))
+        if doc_id is not None:
+            initial["document"] = doc_id
         initial["context_variables_json"] = "{}"
         form = DocumentProcessInstanceForm(tenant=request.tenant, initial=initial)
 
