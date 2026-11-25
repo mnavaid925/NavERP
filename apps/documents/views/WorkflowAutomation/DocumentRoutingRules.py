@@ -130,12 +130,27 @@ def routing_rule_detail(request, pk):
             "owner",
         ),
     )
+    conditions = [
+        {
+            **(c if isinstance(c, dict) else {"value": c}),
+            "value_display": (
+                json.dumps(c.get("value"))
+                if isinstance(c, dict) and isinstance(c.get("value"), (dict, list))
+                else ("" if not isinstance(c, dict) or c.get("value") is None else str(c.get("value")))
+            ),
+        }
+        for c in (rule.conditions_json or [])
+    ]
+    validation_rules = [
+        json.dumps(v, indent=2) if isinstance(v, (dict, list)) else str(v)
+        for v in (rule.validation_rules_json or [])
+    ]
     context = {
         "rule": rule,
-        "conditions": rule.conditions_json or [],
-        "validation_rules": rule.validation_rules_json or [],
-        "auto_populate": rule.auto_populate_json or {},
-        "else_action": rule.else_action_json or {},
+        "conditions": conditions,
+        "validation_rules": validation_rules,
+        "auto_populate": json.dumps(rule.auto_populate_json or {}, indent=2),
+        "else_action": json.dumps(rule.else_action_json or {}, indent=2),
     }
     return render(request, "documents/workflow_automation/routing_rule/detail.html", context)
 
