@@ -1,5 +1,3 @@
-import json
-
 from django import forms
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
@@ -7,6 +5,7 @@ from django.core.exceptions import ValidationError
 from apps.accounts.models import Role
 from apps.core.models import BusinessRule, OrgUnit
 from apps.documents.forms._common import TenantModelForm, TenantUniqueMixin, reject_foreign
+from apps.documents.forms.WorkflowAutomation._common import parse_json_field_value
 from apps.documents.models.StorageRepository.DocumentFolders import DocumentFolder
 from apps.documents.models.VersionControl.Documents import Document
 from apps.documents.models.WorkflowAutomation.DocumentProcessDefinitions import (
@@ -18,26 +17,6 @@ from apps.documents.services.workflow_automation import (
     validate_rule_conditions,
     validate_validation_rules,
 )
-
-
-def _parse_json_value(val, expected_type, label):
-    if val is None or val == "":
-        return expected_type()
-    if isinstance(val, expected_type):
-        return val
-    if isinstance(val, str):
-        stripped = val.strip()
-        if not stripped:
-            return expected_type()
-        try:
-            parsed = json.loads(stripped)
-        except json.JSONDecodeError as exc:
-            raise ValidationError(f"Invalid JSON for {label}: {exc}") from exc
-        if not isinstance(parsed, expected_type):
-            type_label = "array" if expected_type is list else "object"
-            raise ValidationError(f"{label} must be a JSON {type_label}.")
-        return parsed
-    raise ValidationError(f"Invalid structure for {label}.")
 
 
 class DocumentRoutingRuleForm(TenantUniqueMixin, TenantModelForm):
@@ -159,18 +138,22 @@ class DocumentRoutingRuleForm(TenantUniqueMixin, TenantModelForm):
             self.fields[opt].required = False
 
     def clean_conditions_json(self):
-        clauses = _parse_json_value(self.cleaned_data.get("conditions_json"), list, "conditions")
+        clauses = parse_json_field_value(self.cleaned_data.get("conditions_json"), list, "conditions")
         return validate_rule_conditions(clauses)
 
     def clean_else_action_json(self):
-        return _parse_json_value(self.cleaned_data.get("else_action_json"), dict, "else action")
+        return parse_json_field_value(self.cleaned_data.get("else_action_json"), dict, "else action")
 
     def clean_validation_rules_json(self):
-        rules = _parse_json_value(self.cleaned_data.get("validation_rules_json"), list, "validation rules")
+        rules = parse_json_field_value(
+            self.cleaned_data.get("validation_rules_json"), list, "validation rules"
+        )
         return validate_validation_rules(rules)
 
     def clean_auto_populate_json(self):
-        return _parse_json_value(self.cleaned_data.get("auto_populate_json"), dict, "auto-populate config")
+        return parse_json_field_value(
+            self.cleaned_data.get("auto_populate_json"), dict, "auto-populate config"
+        )
 
     def clean(self):
         cleaned = super().clean()
