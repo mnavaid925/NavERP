@@ -261,7 +261,12 @@ def process_instance_edit(request, pk):
 @require_POST
 @tenant_admin_required
 def process_instance_delete(request, pk):
-    instance = documents_object(request, DocumentProcessInstance, pk)
+    instance = documents_object(
+        request,
+        DocumentProcessInstance,
+        pk,
+        select_related=("tenant", "process_definition"),
+    )
     if instance.status not in ("queued", "cancelled", "failed"):
         messages.error(request, "Only queued, cancelled, or failed instances can be deleted.")
         return redirect("documents:process_instance_detail", pk=instance.pk)
