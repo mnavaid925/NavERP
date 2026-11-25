@@ -186,11 +186,11 @@
                     <i data-lucide="arrow-left"></i>
                     <span>Back to Webhooks</span>
                 </a>
+                {% if user.is_superuser or user.is_tenant_admin %}
                 <a href="{% url 'documents:webhook_trigger_edit' webhook.pk %}" class="btn btn-outline w-full justify-start">
                     <i data-lucide="pencil"></i>
                     <span>Edit Webhook</span>
                 </a>
-                {% if user.is_superuser or user.is_tenant_admin %}
                 <form method="post" action="{% url 'documents:webhook_trigger_rotate_secret' webhook.pk %}" onsubmit="return confirm('Rotate HMAC signing secret for {{ webhook.number }}?');">
                     {% csrf_token %}
                     <button type="submit" class="btn btn-outline w-full justify-start">
