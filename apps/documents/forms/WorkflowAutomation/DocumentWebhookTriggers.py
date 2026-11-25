@@ -82,6 +82,9 @@ class DocumentWebhookTriggerForm(TenantUniqueMixin, TenantModelForm):
             self.fields["connector_ref"].queryset = ConnectorDefinition.objects.filter(
                 tenant=self.tenant
             ).order_by("category", "name")
+        else:
+            self.fields["process_definition"].queryset = DocumentProcessDefinition.objects.none()
+            self.fields["connector_ref"].queryset = ConnectorDefinition.objects.none()
         for opt in (
             "description",
             "process_definition",
@@ -138,3 +141,5 @@ class WebhookTestPingForm(forms.Form):
             self.fields["document"].queryset = Document.objects.filter(
                 tenant=tenant
             ).order_by("-created_at", "title")
+        else:
+            self.fields["document"].queryset = Document.objects.none()
