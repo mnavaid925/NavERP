@@ -1,34 +1,14 @@
-import json
-
 from django import forms
 from django.core.exceptions import ValidationError
 
 from apps.core.models import OrgUnit, WorkflowDefinition
 from apps.documents.forms._common import TenantModelForm, TenantUniqueMixin, reject_foreign
+from apps.documents.forms.WorkflowAutomation._common import parse_json_field_value
 from apps.documents.models.StorageRepository.DocumentFolders import DocumentFolder
 from apps.documents.models.WorkflowAutomation.DocumentProcessDefinitions import (
     DocumentProcessDefinition,
 )
 from apps.documents.services.workflow_automation import validate_process_graph
-
-
-def _parse_json_list(val, field_label):
-    if val is None or val == "":
-        return []
-    if isinstance(val, list):
-        return val
-    if isinstance(val, str):
-        stripped = val.strip()
-        if not stripped:
-            return []
-        try:
-            parsed = json.loads(stripped)
-        except json.JSONDecodeError as exc:
-            raise ValidationError(f"Invalid JSON for {field_label}: {exc}") from exc
-        if not isinstance(parsed, list):
-            raise ValidationError(f"{field_label} must be a JSON array.")
-        return parsed
-    raise ValidationError(f"{field_label} must be a JSON array.")
 
 
 class DocumentProcessDefinitionForm(TenantUniqueMixin, TenantModelForm):
@@ -110,13 +90,13 @@ class DocumentProcessDefinitionForm(TenantUniqueMixin, TenantModelForm):
         return code
 
     def clean_swimlanes_json(self):
-        return _parse_json_list(self.cleaned_data.get("swimlanes_json"), "swimlanes")
+        return parse_json_field_value(self.cleaned_data.get("swimlanes_json"), list, "swimlanes")
 
     def clean_nodes_json(self):
-        return _parse_json_list(self.cleaned_data.get("nodes_json"), "nodes")
+        return parse_json_field_value(self.cleaned_data.get("nodes_json"), list, "nodes")
 
     def clean_transitions_json(self):
-        return _parse_json_list(self.cleaned_data.get("transitions_json"), "transitions")
+        return parse_json_field_value(self.cleaned_data.get("transitions_json"), list, "transitions")
 
     def clean(self):
         cleaned = super().clean()
@@ -165,16 +145,16 @@ class ProcessDesignerForm(forms.Form):
     )
 
     def clean_swimlanes_json(self):
-        return _parse_json_list(self.cleaned_data.get("swimlanes_json"), "swimlanes")
+        return parse_json_field_value(self.cleaned_data.get("swimlanes_json"), list, "swimlanes")
 
     def clean_nodes_json(self):
-        nodes = _parse_json_list(self.cleaned_data.get("nodes_json"), "nodes")
+        nodes = parse_json_field_value(self.cleaned_data.get("nodes_json"), list, "nodes")
         if not nodes:
             raise ValidationError("At least one BPMN node is required.")
         return nodes
 
     def clean_transitions_json(self):
-        return _parse_json_list(self.cleaned_data.get("transitions_json"), "transitions")
+        return parse_json_field_value(self.cleaned_data.get("transitions_json"), list, "transitions")
 
     def clean(self):
         cleaned = super().clean()
