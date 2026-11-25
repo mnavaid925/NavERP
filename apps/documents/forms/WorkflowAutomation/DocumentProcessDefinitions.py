@@ -43,7 +43,7 @@ class DocumentProcessDefinitionForm(TenantUniqueMixin, TenantModelForm):
             "core_workflow_ref": forms.Select(attrs={"class": "form-select"}),
             "version_number": forms.NumberInput(attrs={"class": "form-input", "min": "1"}),
             "sla_target_hours": forms.NumberInput(attrs={"class": "form-input", "min": "1"}),
-            "is_active": forms.CheckboxInput(attrs={"class": "form-checkbox"}),
+            "is_active": forms.CheckboxInput(attrs={"class": "form-check"}),
             "swimlanes_json": forms.Textarea(attrs={"class": "form-textarea font-mono text-xs", "rows": 4}),
             "nodes_json": forms.Textarea(attrs={"class": "form-textarea font-mono text-xs", "rows": 6}),
             "transitions_json": forms.Textarea(attrs={"class": "form-textarea font-mono text-xs", "rows": 5}),
