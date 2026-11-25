@@ -39,6 +39,19 @@ def safe_parse_date(value):
         return None
 
 
+def paginate_queryset(queryset, request, per_page=15):
+    """Return a Django Page object for queryset using GET 'page' parameter."""
+    return Paginator(queryset, per_page).get_page(request.GET.get("page"))
+
+
+def parse_int_param(raw):
+    """Parse a non-negative integer string, returning (clean_str, int_val|None)."""
+    text = (raw or "").strip()
+    if text.isdigit():
+        return text, int(text)
+    return "", None
+
+
 def _csv_safe(val):
     if val is None:
         return ""
