@@ -50,7 +50,7 @@ class DocumentWebhookTriggerForm(TenantUniqueMixin, TenantModelForm):
             "payload_template_json": forms.Textarea(attrs={"class": "form-textarea font-mono text-xs", "rows": 3}),
             "filter_document_type": forms.Select(attrs={"class": "form-select"}),
             "retry_policy_max": forms.NumberInput(attrs={"class": "form-input", "min": "0", "max": "20"}),
-            "is_active": forms.CheckboxInput(attrs={"class": "form-checkbox"}),
+            "is_active": forms.CheckboxInput(attrs={"class": "form-check"}),
         }
 
     def __init__(self, *args, **kwargs):
