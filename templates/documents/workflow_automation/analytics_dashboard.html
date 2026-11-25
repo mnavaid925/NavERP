@@ -103,7 +103,7 @@
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
     <div class="card">
         <div class="card-header">
-            <h2 class="text-base font-semibold text-slate-800">Node &amp; Swimlane Bottleneck Analysis</h2>
+            <h2 class="text-base font-semibold text-slate-800 dark:text-slate-100">Node &amp; Swimlane Bottleneck Analysis</h2>
         </div>
         <div class="table-wrap">
             <table class="table">
@@ -120,10 +120,10 @@
                     {% for b in analytics.bottlenecks %}
                     <tr>
                         <td>
-                            <div class="font-medium text-slate-800">{{ b.label }}</div>
-                            <div class="text-xs text-slate-500 font-mono">{{ b.node_id }}</div>
+                            <div class="font-medium text-slate-800 dark:text-slate-100">{{ b.label }}</div>
+                            <div class="text-xs text-slate-500 dark:text-slate-400 font-mono">{{ b.node_id }}</div>
                         </td>
-                        <td class="text-xs text-slate-600">{{ b.lane }}</td>
+                        <td class="text-xs text-slate-600 dark:text-slate-300">{{ b.lane }}</td>
                         <td class="text-xs font-mono">{{ b.executions }}</td>
                         <td class="text-xs font-mono">{{ b.avg_minutes }}m / {{ b.max_minutes }}m</td>
                         <td>
@@ -131,7 +131,7 @@
                         </td>
                     </tr>
                     {% empty %}
-                    <tr><td colspan="5" class="text-center text-xs text-slate-500 py-4">No step telemetry recorded yet.</td></tr>
+                    <tr><td colspan="5" class="text-center text-xs text-slate-500 dark:text-slate-400 py-4">No step telemetry recorded yet.</td></tr>
                     {% endfor %}
                 </tbody>
             </table>
@@ -140,7 +140,7 @@
 
     <div class="card">
         <div class="card-header">
-            <h2 class="text-base font-semibold text-slate-800">Process Mining Variants &amp; Conformance</h2>
+            <h2 class="text-base font-semibold text-slate-800 dark:text-slate-100">Process Mining Variants &amp; Conformance</h2>
         </div>
         <div class="table-wrap">
             <table class="table">
@@ -156,7 +156,7 @@
                 <tbody>
                     {% for v in analytics.variants %}
                     <tr>
-                        <td class="font-mono text-xs text-slate-700">{{ v.signature }}</td>
+                        <td class="font-mono text-xs text-slate-700 dark:text-slate-200">{{ v.signature }}</td>
                         <td class="text-xs font-mono">{{ v.count }} ({{ v.pct }}%)</td>
                         <td class="text-xs font-mono">{{ v.avg_cycle_minutes }}m</td>
                         <td>
@@ -167,7 +167,7 @@
                         </td>
                     </tr>
                     {% empty %}
-                    <tr><td colspan="5" class="text-center text-xs text-slate-500 py-4">No process variants discovered yet.</td></tr>
+                    <tr><td colspan="5" class="text-center text-xs text-slate-500 dark:text-slate-400 py-4">No process variants discovered yet.</td></tr>
                     {% endfor %}
                 </tbody>
             </table>
@@ -177,7 +177,7 @@
 
 <div class="card">
     <div class="card-header">
-        <h2 class="text-base font-semibold text-slate-800">Top Routing Rules Effectiveness</h2>
+        <h2 class="text-base font-semibold text-slate-800 dark:text-slate-100">Top Routing Rules Effectiveness</h2>
     </div>
     <div class="table-wrap">
         <table class="table">
@@ -195,8 +195,8 @@
                 {% for rule in analytics.top_rules %}
                 <tr>
                     <td>
-                        <a href="{% url 'documents:routing_rule_detail' rule.pk %}" class="font-medium text-blue-600 hover:underline">{{ rule.name }}</a>
-                        <div class="text-xs text-slate-500 font-mono">{{ rule.number }}</div>
+                        <a href="{% url 'documents:routing_rule_detail' rule.pk %}" class="font-medium text-blue-600 dark:text-blue-400 hover:underline">{{ rule.name }}</a>
+                        <div class="text-xs text-slate-500 dark:text-slate-400 font-mono">{{ rule.number }}</div>
                     </td>
                     <td><span class="badge {{ rule.rule_type_badge }}">{{ rule.get_rule_type_display }}</span></td>
                     <td><span class="badge {{ rule.route_action_badge }}">{{ rule.get_route_action_display }}</span></td>
@@ -205,7 +205,7 @@
                     <td class="text-xs font-mono">{{ rule.match_rate_pct }}%</td>
                 </tr>
                 {% empty %}
-                <tr><td colspan="6" class="text-center text-xs text-slate-500 py-4">No routing rule telemetry recorded yet.</td></tr>
+                <tr><td colspan="6" class="text-center text-xs text-slate-500 dark:text-slate-400 py-4">No routing rule telemetry recorded yet.</td></tr>
                 {% endfor %}
             </tbody>
         </table>
