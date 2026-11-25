@@ -4,7 +4,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Q, Sum
+from django.db.models import Count, Q, Sum
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_POST
 
@@ -31,7 +31,16 @@ def routing_rule_list(request):
             "route_to_org_unit",
             "route_to_role",
             "route_to_user",
-            "owner",
+        ).defer(
+            "conditions_json",
+            "else_action_json",
+            "validation_rules_json",
+            "auto_populate_json",
+            "description",
+            "process_definition__swimlanes_json",
+            "process_definition__nodes_json",
+            "process_definition__transitions_json",
+            "process_definition__description",
         ),
         request,
     )
@@ -66,23 +75,27 @@ def routing_rule_list(request):
     if process_definition_id and process_definition_id.isdigit():
         qs = qs.filter(process_definition_id=int(process_definition_id))
 
-    total_count = qs.count()
-    active_count = qs.filter(is_active=True).count()
-    total_matches = qs.aggregate(total=Sum("match_count"))["total"] or 0
+    stats = qs.aggregate(
+        total_count=Count("id"),
+        active_count=Count("id", filter=Q(is_active=True)),
+        total_matches=Sum("match_count"),
+    )
 
     paginator = Paginator(qs, 15)
     page_obj = paginator.get_page(request.GET.get("page"))
 
-    process_definitions = DocumentProcessDefinition.objects.filter(
-        tenant=request.tenant
-    ).order_by("code", "-version_number")
+    process_definitions = (
+        DocumentProcessDefinition.objects.filter(tenant=request.tenant)
+        .only("id", "code", "version_number", "name", "tenant_id")
+        .order_by("code", "-version_number")
+    )
 
     context = {
         "routing_rules": page_obj.object_list,
         "page_obj": page_obj,
-        "total_count": total_count,
-        "active_count": active_count,
-        "total_matches": total_matches,
+        "total_count": stats["total_count"] or 0,
+        "active_count": stats["active_count"] or 0,
+        "total_matches": stats["total_matches"] or 0,
         "rule_type_choices": DocumentRoutingRule.RULE_TYPE_CHOICES,
         "trigger_choices": DocumentRoutingRule.TRIGGER_EVENT_CHOICES,
         "route_action_choices": DocumentRoutingRule.ROUTE_ACTION_CHOICES,
