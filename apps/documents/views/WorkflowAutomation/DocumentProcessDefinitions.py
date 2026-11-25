@@ -185,9 +185,11 @@ def process_definition_create(request):
                 proc.tenant = request.tenant
                 proc.owner = request.user
                 proc.status = "draft"
-                if not proc.nodes_json:
+                if not proc.swimlanes_json:
                     proc.swimlanes_json = list(DEFAULT_SWIMLANES)
+                if not proc.nodes_json:
                     proc.nodes_json = list(DEFAULT_NODES)
+                if not proc.transitions_json:
                     proc.transitions_json = list(DEFAULT_TRANSITIONS)
                 proc.save()
                 write_audit_log(request.user, proc, "create", tenant=request.tenant)
