@@ -147,6 +147,7 @@ def process_instance_detail(request, pk):
         request,
         DocumentProcessInstance,
         pk,
+        queryset=DocumentProcessInstance.objects.defer("version__extracted_text"),
         select_related=(
             "process_definition",
             "document",
