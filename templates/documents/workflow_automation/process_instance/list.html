@@ -164,11 +164,11 @@
                         <span class="badge {{ inst.status_badge }}">{{ inst.get_status_display }}</span>
                     </td>
                     <td class="table-actions text-right">
-                        <a href="{% url 'documents:process_instance_detail' inst.pk %}" class="btn btn-icon btn-outline" title="Inspect Instance" aria-label="View {{ inst.number }}">
+                        <a href="{% url 'documents:process_instance_detail' inst.pk %}" class="btn btn-icon" title="Inspect Instance" aria-label="View {{ inst.number }}">
                             <i data-lucide="eye"></i>
                         </a>
                         {% if inst.status != 'completed' and inst.status != 'cancelled' %}
-                        <a href="{% url 'documents:process_instance_edit' inst.pk %}" class="btn btn-icon btn-outline" title="Edit Instance" aria-label="Edit {{ inst.number }}">
+                        <a href="{% url 'documents:process_instance_edit' inst.pk %}" class="btn btn-icon" title="Edit Instance" aria-label="Edit {{ inst.number }}">
                             <i data-lucide="pencil"></i>
                         </a>
                         {% endif %}
@@ -176,7 +176,7 @@
                         {% if user.is_superuser or user.is_tenant_admin %}
                         <form method="post" action="{% url 'documents:process_instance_delete' inst.pk %}" class="inline" onsubmit="return confirm('Delete process instance {{ inst.number }}?');">
                             {% csrf_token %}
-                            <button type="submit" class="btn btn-icon btn-danger" title="Delete Instance" aria-label="Delete {{ inst.number }}">
+                            <button type="submit" class="btn btn-icon danger" title="Delete Instance" aria-label="Delete {{ inst.number }}">
                                 <i data-lucide="trash-2"></i>
                             </button>
                         </form>
