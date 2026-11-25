@@ -15,7 +15,7 @@
         </div>
         <h1 class="page-title">DMS Integration Triggers &amp; Webhooks</h1>
     </div>
-    <div class="page-actions">
+    <div class="page-actions flex-wrap">
         <a href="{% url 'documents:process_definition_list' %}" class="btn btn-outline">
             <i data-lucide="git-branch"></i>
             <span>Process Blueprints</span>
@@ -62,12 +62,12 @@
 
 <div class="card mb-6">
     <div class="card-body">
-        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
-            <div class="form-group">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 items-end">
+            <div class="form-group mb-0">
                 <label class="form-label" for="id_q">Search</label>
                 <input type="text" id="id_q" name="q" value="{{ q }}" placeholder="Name, DWHK-, endpoint URL..." class="form-input w-full">
             </div>
-            <div class="form-group">
+            <div class="form-group mb-0">
                 <label class="form-label" for="id_direction">Direction</label>
                 <select id="id_direction" name="direction" class="form-select w-full">
                     <option value="">All Directions</option>
@@ -76,7 +76,7 @@
                     {% endfor %}
                 </select>
             </div>
-            <div class="form-group">
+            <div class="form-group mb-0">
                 <label class="form-label" for="id_trigger_event">DMS Event</label>
                 <select id="id_trigger_event" name="trigger_event" class="form-select w-full">
                     <option value="">All Events</option>
@@ -85,7 +85,7 @@
                     {% endfor %}
                 </select>
             </div>
-            <div class="form-group">
+            <div class="form-group mb-0">
                 <label class="form-label" for="id_last_status">Last Delivery</label>
                 <select id="id_last_status" name="last_status" class="form-select w-full">
                     <option value="">All Delivery States</option>
@@ -94,7 +94,7 @@
                     {% endfor %}
                 </select>
             </div>
-            <div class="form-group">
+            <div class="form-group mb-0">
                 <label class="form-label" for="id_status">Enabled</label>
                 <select id="id_status" name="status" class="form-select w-full">
                     <option value="">All</option>
@@ -127,7 +127,7 @@
                     <th>Fires</th>
                     <th>Last Delivery</th>
                     <th>Enabled</th>
-                    <th class="text-right">Actions</th>
+                    <th class="text-end">Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -146,21 +146,23 @@
                     <td class="text-xs font-mono">{{ wh.fire_count }}</td>
                     <td><span class="badge {{ wh.last_status_badge }}">{{ wh.get_last_status_display }}</span></td>
                     <td><span class="badge {{ wh.active_badge }}">{% if wh.is_active %}Active{% else %}Paused{% endif %}</span></td>
-                    <td class="table-actions text-right">
-                        <a href="{% url 'documents:webhook_trigger_detail' wh.pk %}" class="btn btn-icon" title="Inspect Webhook" aria-label="View {{ wh.number }}">
-                            <i data-lucide="eye"></i>
-                        </a>
-                        {% if user.is_superuser or user.is_tenant_admin %}
-                        <a href="{% url 'documents:webhook_trigger_edit' wh.pk %}" class="btn btn-icon" title="Edit Webhook" aria-label="Edit {{ wh.number }}">
-                            <i data-lucide="pencil"></i>
-                        </a>
-                        <form method="post" action="{% url 'documents:webhook_trigger_delete' wh.pk %}" class="inline" onsubmit="return confirm('Delete webhook trigger {{ wh.number }}?');">
-                            {% csrf_token %}
-                            <button type="submit" class="btn btn-icon danger" title="Delete Webhook" aria-label="Delete {{ wh.number }}">
-                                <i data-lucide="trash-2"></i>
-                            </button>
-                        </form>
-                        {% endif %}
+                    <td class="text-end">
+                        <div class="table-actions">
+                            <a href="{% url 'documents:webhook_trigger_detail' wh.pk %}" class="btn btn-icon" title="Inspect Webhook" aria-label="View {{ wh.number }}">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            {% if user.is_superuser or user.is_tenant_admin %}
+                            <a href="{% url 'documents:webhook_trigger_edit' wh.pk %}" class="btn btn-icon" title="Edit Webhook" aria-label="Edit {{ wh.number }}">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form method="post" action="{% url 'documents:webhook_trigger_delete' wh.pk %}" class="inline" onsubmit="return confirm('Delete webhook trigger {{ wh.number }}?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon danger" title="Delete Webhook" aria-label="Delete {{ wh.number }}">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                            {% endif %}
+                        </div>
                     </td>
                 </tr>
                 {% empty %}
@@ -182,7 +184,7 @@
     </div>
     {% if page_obj.has_other_pages %}
     <div class="pagination">
-        <span class="text-xs text-slate-500">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+        <span class="muted">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
         <div class="flex items-center gap-2">
             {% if page_obj.has_previous %}
             <a href="?page={{ page_obj.previous_page_number }}&q={{ q|urlencode }}&direction={{ direction|urlencode }}&trigger_event={{ trigger_event|urlencode }}&last_status={{ last_status|urlencode }}&status={{ status|urlencode }}" class="btn btn-outline btn-sm">Previous</a>
