@@ -212,7 +212,7 @@ def webhook_trigger_edit(request, pk):
 @require_POST
 @tenant_admin_required
 def webhook_trigger_delete(request, pk):
-    webhook = documents_object(request, DocumentWebhookTrigger, pk)
+    webhook = documents_object(request, DocumentWebhookTrigger, pk, select_related=("tenant",))
     number = webhook.number
     with transaction.atomic():
         write_audit_log(request.user, webhook, "delete", tenant=request.tenant)
@@ -225,7 +225,7 @@ def webhook_trigger_delete(request, pk):
 @require_POST
 @tenant_admin_required
 def webhook_trigger_rotate_secret(request, pk):
-    webhook = documents_object(request, DocumentWebhookTrigger, pk)
+    webhook = documents_object(request, DocumentWebhookTrigger, pk, select_related=("tenant",))
     with transaction.atomic():
         raw_secret = webhook.generate_signing_secret()
         webhook.save(update_fields=["signing_secret", "signing_secret_prefix", "updated_at"])
