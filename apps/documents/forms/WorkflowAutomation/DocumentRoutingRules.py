@@ -114,6 +114,14 @@ class DocumentRoutingRuleForm(TenantUniqueMixin, TenantModelForm):
             self.fields["route_to_user"].queryset = User.objects.filter(
                 tenant=self.tenant, is_active=True
             ).order_by("username")
+        else:
+            self.fields["process_definition"].queryset = DocumentProcessDefinition.objects.none()
+            self.fields["core_rule_ref"].queryset = BusinessRule.objects.none()
+            self.fields["source_folder"].queryset = DocumentFolder.objects.none()
+            self.fields["destination_folder"].queryset = DocumentFolder.objects.none()
+            self.fields["route_to_org_unit"].queryset = OrgUnit.objects.none()
+            self.fields["route_to_role"].queryset = Role.objects.none()
+            self.fields["route_to_user"].queryset = User.objects.none()
 
         for opt in (
             "description",
@@ -209,3 +217,6 @@ class RoutingRuleSimulatorForm(forms.Form):
             self.fields["rule"].queryset = DocumentRoutingRule.objects.filter(
                 tenant=tenant
             ).order_by("priority", "name")
+        else:
+            self.fields["document"].queryset = Document.objects.none()
+            self.fields["rule"].queryset = DocumentRoutingRule.objects.none()
