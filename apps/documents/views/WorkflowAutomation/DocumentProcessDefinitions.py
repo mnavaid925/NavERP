@@ -10,7 +10,6 @@ from django.shortcuts import redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from apps.accounts.models import Role
 from apps.core.decorators import tenant_admin_required
 from apps.core.models import OrgUnit
 from apps.core.utils import write_audit_log
@@ -319,8 +318,6 @@ def process_definition_designer(request, pk):
 
     validation_result = process_def.validate_graph()
     simulation_steps = simulate_process_path(process_def, context={"classification": "confidential"})
-    roles = Role.objects.filter(tenant=request.tenant).order_by("name")
-    departments = OrgUnit.objects.filter(tenant=request.tenant).order_by("name")
     swimlanes = process_def.swimlanes_json or []
     nodes = process_def.nodes_json or []
     lane_ids = {
@@ -344,8 +341,6 @@ def process_definition_designer(request, pk):
         "transitions": process_def.transitions_json or [],
         "validation_result": validation_result,
         "simulation_steps": simulation_steps,
-        "roles": roles,
-        "departments": departments,
     }
     return render(request, "documents/workflow_automation/process_definition/designer.html", context)
 
