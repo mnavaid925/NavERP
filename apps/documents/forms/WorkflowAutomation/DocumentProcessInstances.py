@@ -42,17 +42,24 @@ class DocumentProcessInstanceForm(TenantUniqueMixin, TenantModelForm):
         super().__init__(*args, **kwargs)
         User = get_user_model()
         if self.tenant:
-            if self.instance and self.instance.pk and self.instance.process_definition_id:
-                self.fields["process_definition"].queryset = DocumentProcessDefinition.objects.filter(
-                    tenant=self.tenant, pk=self.instance.process_definition_id
-                )
+            if self.instance and self.instance.pk:
+                if self.instance.process_definition_id:
+                    self.fields["process_definition"].queryset = DocumentProcessDefinition.objects.filter(
+                        tenant=self.tenant, pk=self.instance.process_definition_id
+                    )
+                self.fields["process_definition"].disabled = True
+                if self.instance.document_id:
+                    self.fields["document"].queryset = Document.objects.filter(
+                        tenant=self.tenant, pk=self.instance.document_id
+                    )
+                self.fields["document"].disabled = True
             else:
                 self.fields["process_definition"].queryset = DocumentProcessDefinition.objects.filter(
                     tenant=self.tenant, status="published", is_active=True
                 ).order_by("code", "-version_number")
-            self.fields["document"].queryset = Document.objects.filter(
-                tenant=self.tenant
-            ).order_by("-created_at", "title")
+                self.fields["document"].queryset = Document.objects.filter(
+                    tenant=self.tenant
+                ).order_by("-created_at", "title")
             self.fields["version"].queryset = (
                 DocumentVersion.objects.filter(tenant=self.tenant)
                 .select_related("document")
