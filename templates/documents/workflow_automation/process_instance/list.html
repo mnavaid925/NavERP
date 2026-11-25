@@ -132,28 +132,28 @@
                 {% for inst in instances %}
                 <tr>
                     <td>
-                        <a href="{% url 'documents:process_instance_detail' inst.pk %}" class="font-mono font-semibold text-blue-600 hover:underline">
+                        <a href="{% url 'documents:process_instance_detail' inst.pk %}" class="font-mono font-semibold text-blue-600 dark:text-blue-400 hover:underline">
                             {{ inst.number }}
                         </a>
-                        <div class="text-xs text-slate-500">{{ inst.started_at|date:"Y-m-d H:i" }}</div>
+                        <div class="text-xs text-slate-500 dark:text-slate-400">{{ inst.started_at|date:"Y-m-d H:i" }}</div>
                     </td>
                     <td>
-                        <a href="{% url 'documents:process_definition_detail' inst.process_definition.pk %}" class="font-medium text-slate-800 hover:underline">{{ inst.process_definition.name }}</a>
-                        <div class="text-xs text-slate-500 font-mono">{{ inst.process_definition.code }} v{{ inst.process_definition.version_number }}</div>
+                        <a href="{% url 'documents:process_definition_detail' inst.process_definition.pk %}" class="font-medium text-slate-800 dark:text-slate-100 hover:underline">{{ inst.process_definition.name }}</a>
+                        <div class="text-xs text-slate-500 dark:text-slate-400 font-mono">{{ inst.process_definition.code }} v{{ inst.process_definition.version_number }}</div>
                     </td>
                     <td>
-                        <a href="{% url 'documents:document_detail' inst.document.pk %}" class="text-blue-600 hover:underline">{{ inst.document.title|truncatechars:35 }}</a>
-                        <div class="text-xs text-slate-500 font-mono">{{ inst.document.number }}</div>
+                        <a href="{% url 'documents:document_detail' inst.document.pk %}" class="text-blue-600 dark:text-blue-400 hover:underline">{{ inst.document.title|truncatechars:35 }}</a>
+                        <div class="text-xs text-slate-500 dark:text-slate-400 font-mono">{{ inst.document.number }}</div>
                     </td>
-                    <td class="text-xs text-slate-700">
+                    <td class="text-xs text-slate-700 dark:text-slate-200">
                         <div class="font-medium">{{ inst.current_node_label|default:inst.current_node_id|default:"—" }}</div>
                         {% if inst.current_assignee %}
-                        <div class="text-slate-500">{{ inst.current_assignee.get_full_name|default:inst.current_assignee.username }}</div>
+                        <div class="text-slate-500 dark:text-slate-400">{{ inst.current_assignee.get_full_name|default:inst.current_assignee.username }}</div>
                         {% endif %}
                     </td>
-                    <td class="text-xs text-slate-600">
+                    <td class="text-xs text-slate-600 dark:text-slate-300">
                         <div>{{ inst.duration_display }}</div>
-                        <div class="text-slate-500">Rework: {{ inst.rework_count }}</div>
+                        <div class="text-slate-500 dark:text-slate-400">Rework: {{ inst.rework_count }}</div>
                     </td>
                     <td>
                         <span class="badge {{ inst.sla_badge }}">
@@ -188,9 +188,9 @@
                 <tr>
                     <td colspan="8">
                         <div class="empty-state">
-                            <i data-lucide="play-circle" class="w-10 h-10 text-slate-300 mx-auto mb-2"></i>
-                            <p class="font-medium text-slate-700">No process instances found</p>
-                            <p class="text-xs text-slate-500 mb-3">Launch a published BPM blueprint on any document to track step execution and SLA compliance.</p>
+                            <i data-lucide="play-circle" class="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto mb-2"></i>
+                            <p class="font-medium text-slate-700 dark:text-slate-200">No process instances found</p>
+                            <p class="text-xs text-slate-500 dark:text-slate-400 mb-3">Launch a published BPM blueprint on any document to track step execution and SLA compliance.</p>
                             <a href="{% url 'documents:process_instance_create' %}" class="btn btn-primary btn-sm">Launch Process</a>
                         </div>
                     </td>
