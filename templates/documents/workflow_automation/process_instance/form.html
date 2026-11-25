@@ -26,13 +26,13 @@
 <div class="max-w-3xl mx-auto">
     <div class="card">
         <div class="card-header">
-            <h2 class="text-base font-semibold text-slate-800">Process Instance Target &amp; Assignment</h2>
+            <h2 class="text-base font-semibold text-slate-800 dark:text-slate-100">Process Instance Target &amp; Assignment</h2>
         </div>
         <div class="card-body">
             <form method="post" class="space-y-4">
                 {% csrf_token %}
                 {% if form.non_field_errors %}
-                <div class="p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">{{ form.non_field_errors }}</div>
+                <div class="p-3 bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-800 rounded text-red-700 dark:text-red-200 text-sm">{{ form.non_field_errors }}</div>
                 {% endif %}
 
                 <div class="form-group">
@@ -73,7 +73,7 @@
                     {% if form.context_variables_json.errors %}<div class="form-error">{{ form.context_variables_json.errors }}</div>{% endif %}
                 </div>
 
-                <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-700">
                     <a href="{% url 'documents:process_instance_list' %}" class="btn btn-outline">Cancel</a>
                     <button type="submit" class="btn btn-primary">
                         <i data-lucide="play"></i>
