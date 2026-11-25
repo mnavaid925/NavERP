@@ -298,6 +298,17 @@ def _resolve_doc_field(doc_ctx, source, field):
     return doc_ctx.get("document", {}).get(field)
 
 
+def _as_eval_str(val):
+    """Stringify condition values without collapsing False or 0 to empty string."""
+    if val is None:
+        return ""
+    if val is True:
+        return "true"
+    if val is False:
+        return "false"
+    return str(val)
+
+
 def evaluate_condition_clause(clause, doc_ctx):
     """Evaluate a single structured rule clause against normalized document context."""
     if not isinstance(clause, dict):
@@ -314,21 +325,21 @@ def evaluate_condition_clause(clause, doc_ctx):
 
     matched = False
     if op == "is_set":
-        matched = actual is not None and str(actual).strip() != ""
+        matched = actual is not None and _as_eval_str(actual).strip() != ""
     elif op == "is_empty":
-        matched = actual is None or str(actual).strip() == ""
+        matched = actual is None or _as_eval_str(actual).strip() == ""
     elif op == "eq":
         d_act, d_exp = _to_finite_decimal(actual), _to_finite_decimal(expected)
         if d_act is not None and d_exp is not None:
             matched = d_act == d_exp
         else:
-            matched = str(actual or "").strip().lower() == str(expected or "").strip().lower()
+            matched = _as_eval_str(actual).strip().lower() == _as_eval_str(expected).strip().lower()
     elif op == "ne":
         d_act, d_exp = _to_finite_decimal(actual), _to_finite_decimal(expected)
         if d_act is not None and d_exp is not None:
             matched = d_act != d_exp
         else:
-            matched = str(actual or "").strip().lower() != str(expected or "").strip().lower()
+            matched = _as_eval_str(actual).strip().lower() != _as_eval_str(expected).strip().lower()
     elif op in ("gt", "gte", "lt", "lte"):
         d_act, d_exp = _to_finite_decimal(actual), _to_finite_decimal(expected)
         if d_act is not None and d_exp is not None:
@@ -342,18 +353,18 @@ def evaluate_condition_clause(clause, doc_ctx):
                 matched = d_act <= d_exp
     elif op in ("in", "not_in"):
         items = expected if isinstance(expected, (list, tuple, set)) else [
-            part.strip() for part in str(expected or "").split(",") if part.strip()
+            part.strip() for part in _as_eval_str(expected).split(",") if part.strip()
         ]
-        norm_items = {str(item).strip().lower() for item in items}
-        in_set = str(actual or "").strip().lower() in norm_items
+        norm_items = {_as_eval_str(item).strip().lower() for item in items}
+        in_set = _as_eval_str(actual).strip().lower() in norm_items
         matched = in_set if op == "in" else not in_set
     elif op == "contains":
-        matched = str(expected or "").strip().lower() in str(actual or "").strip().lower()
+        matched = _as_eval_str(expected).strip().lower() in _as_eval_str(actual).strip().lower()
     elif op == "regex_match":
-        pattern = str(expected or "")
+        pattern = _as_eval_str(expected)
         if len(pattern) <= 200:
             try:
-                matched = bool(re.search(pattern, str(actual or ""), re.IGNORECASE))
+                matched = bool(re.search(pattern, _as_eval_str(actual)[:1000], re.IGNORECASE))
             except re.error:
                 matched = False
 
