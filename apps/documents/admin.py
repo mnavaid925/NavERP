@@ -406,9 +406,20 @@ class ChainOfCustodyExportAdmin(admin.ModelAdmin):
     readonly_fields = ("number", "access_token", "package_hash", "sealed_at", "created_at", "updated_at")
 
 
+class _WorkflowAdminDeferMixin:
+    defer_changelist_fields = ()
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        url_name = getattr(getattr(request, "resolver_match", None), "url_name", "") or ""
+        if self.defer_changelist_fields and "change" not in url_name:
+            return qs.defer(*self.defer_changelist_fields)
+        return qs
+
+
 # 13.11 Workflow Automation & BPM
 @admin.register(DocumentProcessDefinition)
-class DocumentProcessDefinitionAdmin(admin.ModelAdmin):
+class DocumentProcessDefinitionAdmin(_WorkflowAdminDeferMixin, admin.ModelAdmin):
     list_display = (
         "number",
         "code",
@@ -422,12 +433,15 @@ class DocumentProcessDefinitionAdmin(admin.ModelAdmin):
         "tenant",
     )
     list_filter = ("status", "process_category", "trigger_event", "is_active", "tenant")
+    list_select_related = ("tenant",)
+    raw_id_fields = ("target_folder", "department", "core_workflow_ref", "owner")
+    defer_changelist_fields = ("swimlanes_json", "nodes_json", "transitions_json", "description")
     search_fields = ("number", "code", "name", "description")
     readonly_fields = ("number", "instance_count", "published_at", "created_at", "updated_at")
 
 
 @admin.register(DocumentRoutingRule)
-class DocumentRoutingRuleAdmin(admin.ModelAdmin):
+class DocumentRoutingRuleAdmin(_WorkflowAdminDeferMixin, admin.ModelAdmin):
     list_display = (
         "number",
         "name",
@@ -441,12 +455,30 @@ class DocumentRoutingRuleAdmin(admin.ModelAdmin):
         "tenant",
     )
     list_filter = ("rule_type", "trigger_event", "route_action", "is_active", "tenant")
+    list_select_related = ("tenant",)
+    raw_id_fields = (
+        "process_definition",
+        "core_rule_ref",
+        "source_folder",
+        "destination_folder",
+        "route_to_org_unit",
+        "route_to_role",
+        "route_to_user",
+        "owner",
+    )
+    defer_changelist_fields = (
+        "conditions_json",
+        "else_action_json",
+        "validation_rules_json",
+        "auto_populate_json",
+        "description",
+    )
     search_fields = ("number", "name", "description")
     readonly_fields = ("number", "execution_count", "match_count", "last_evaluated_at", "created_at", "updated_at")
 
 
 @admin.register(DocumentProcessInstance)
-class DocumentProcessInstanceAdmin(admin.ModelAdmin):
+class DocumentProcessInstanceAdmin(_WorkflowAdminDeferMixin, admin.ModelAdmin):
     list_display = (
         "number",
         "process_definition",
@@ -459,6 +491,25 @@ class DocumentProcessInstanceAdmin(admin.ModelAdmin):
         "tenant",
     )
     list_filter = ("status", "is_sla_breached", "is_conformant", "tenant")
+    list_select_related = ("tenant", "process_definition", "document")
+    raw_id_fields = (
+        "process_definition",
+        "document",
+        "version",
+        "triggered_by_rule",
+        "approval_workflow",
+        "department",
+        "initiated_by",
+        "current_assignee",
+    )
+    defer_changelist_fields = (
+        "step_trace_json",
+        "context_variables_json",
+        "error_message",
+        "process_definition__swimlanes_json",
+        "process_definition__nodes_json",
+        "process_definition__transitions_json",
+    )
     search_fields = ("number", "current_node_id", "current_node_label", "variant_signature")
     readonly_fields = (
         "number",
@@ -476,7 +527,7 @@ class DocumentProcessInstanceAdmin(admin.ModelAdmin):
 
 
 @admin.register(DocumentWebhookTrigger)
-class DocumentWebhookTriggerAdmin(admin.ModelAdmin):
+class DocumentWebhookTriggerAdmin(_WorkflowAdminDeferMixin, admin.ModelAdmin):
     list_display = (
         "number",
         "name",
@@ -490,6 +541,15 @@ class DocumentWebhookTriggerAdmin(admin.ModelAdmin):
         "tenant",
     )
     list_filter = ("direction", "trigger_event", "last_status", "is_active", "tenant")
+    list_select_related = ("tenant",)
+    raw_id_fields = ("process_definition", "connector_ref", "owner")
+    defer_changelist_fields = (
+        "custom_headers",
+        "payload_template_json",
+        "delivery_history_json",
+        "signing_secret",
+        "description",
+    )
     search_fields = ("number", "name", "target_url", "signing_secret_prefix")
     exclude = ("signing_secret",)
     readonly_fields = (
