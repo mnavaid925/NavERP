@@ -151,12 +151,17 @@
             </div>
         </div>
 
-        {% if webhook.process_definition %}
+        {% if webhook.direction == 'inbound_webhook' %}
         <div class="card">
             <div class="card-header">
                 <h2 class="text-base font-semibold text-slate-800 dark:text-slate-100">Simulate Inbound Trigger</h2>
             </div>
             <div class="card-body">
+                {% if not webhook.is_active %}
+                <p class="text-xs text-amber-700 dark:text-amber-300 mb-3">Trigger is currently paused; inbound simulation is disabled until activated.</p>
+                {% elif not webhook.process_definition %}
+                <p class="text-xs text-slate-500 dark:text-slate-400 mb-3">No process blueprint linked; simulation logs an inbound callback only.</p>
+                {% endif %}
                 <form method="post" action="{% url 'documents:webhook_trigger_simulate_inbound' webhook.pk %}" class="space-y-3">
                     {% csrf_token %}
                     <div class="form-group">
@@ -168,7 +173,7 @@
                             {% endfor %}
                         </select>
                     </div>
-                    <button type="submit" class="btn btn-outline w-full">
+                    <button type="submit" class="btn btn-outline w-full" {% if not webhook.is_active %}disabled{% endif %}>
                         <i data-lucide="play"></i>
                         <span>Simulate Inbound Trigger</span>
                     </button>
