@@ -112,7 +112,16 @@ def webhook_trigger_detail(request, pk):
         request.session.pop("_dwhk_secret_reveal", None)
         revealed_secret = reveal.get("secret")
 
-    delivery_history = list(reversed(webhook.delivery_history_json or []))
+    delivery_history = [
+        {
+            **(entry if isinstance(entry, dict) else {"payload": entry}),
+            "payload_json": json.dumps(
+                entry.get("payload") if isinstance(entry, dict) else entry,
+                sort_keys=True,
+            ),
+        }
+        for entry in reversed(webhook.delivery_history_json or [])
+    ]
     all_docs = list(
         Document.objects.filter(tenant=request.tenant)
         .only("id", "number", "title", "current_version_label", "created_at", "tenant_id")
@@ -128,6 +137,8 @@ def webhook_trigger_detail(request, pk):
         "webhook": webhook,
         "revealed_secret": revealed_secret,
         "delivery_history": delivery_history,
+        "custom_headers_json": json.dumps(webhook.custom_headers or {}, indent=2),
+        "payload_template_json": json.dumps(webhook.payload_template_json or {}, indent=2),
         "ping_form": ping_form,
         "tenant_documents": tenant_documents,
     }
