@@ -42,6 +42,10 @@ from apps.documents.models.AuditReporting.DocumentAuditTrails import DocumentAud
 from apps.documents.models.AuditReporting.AuditReportDefinitions import AuditReportDefinition
 from apps.documents.models.AuditReporting.DocumentSecurityAlerts import DocumentSecurityAlert
 from apps.documents.models.AuditReporting.ChainOfCustodyExports import ChainOfCustodyExport
+from apps.documents.models.WorkflowAutomation.DocumentProcessDefinitions import DocumentProcessDefinition
+from apps.documents.models.WorkflowAutomation.DocumentRoutingRules import DocumentRoutingRule
+from apps.documents.models.WorkflowAutomation.DocumentProcessInstances import DocumentProcessInstance
+from apps.documents.models.WorkflowAutomation.DocumentWebhookTriggers import DocumentWebhookTrigger
 from apps.core.models import OrgUnit
 
 
@@ -819,6 +823,154 @@ def custody_export(db, tenant_a, admin_user, document):
     pkg.set_passcode("AuditPass2026!")
     pkg.save()
     return pkg
+
+
+# --- Sub-module 13.11: Workflow Automation & BPM Fixtures ---
+
+@pytest.fixture
+def process_definition(db, tenant_a, admin_user, document_folder, org_unit_a):
+    """Fixture providing a published, valid BPM DocumentProcessDefinition in tenant_a."""
+    from django.utils import timezone
+
+    return DocumentProcessDefinition.objects.create(
+        tenant=tenant_a,
+        name="Test Contract Intake Blueprint",
+        code="DBPM-TEST-01",
+        description="Published BPMN test blueprint with gateway and approval subprocess.",
+        process_category="contract_review",
+        trigger_event="document_created",
+        target_document_type="all",
+        target_folder=document_folder,
+        department=org_unit_a,
+        owner=admin_user,
+        version_number=1,
+        status="published",
+        is_active=True,
+        sla_target_hours=48,
+        published_at=timezone.now(),
+        swimlanes_json=[
+            {"id": "lane_intake", "name": "Intake", "role": "Coordinator"},
+            {"id": "lane_legal", "name": "Legal", "role": "Reviewer"},
+        ],
+        nodes_json=[
+            {"id": "n_start", "type": "start_event", "label": "Start", "lane_id": "lane_intake"},
+            {"id": "n_task", "type": "user_task", "label": "Initial Triage", "lane_id": "lane_intake"},
+            {"id": "n_gw", "type": "exclusive_gateway", "label": "Confidential?", "lane_id": "lane_legal"},
+            {"id": "n_app", "type": "approval_subprocess", "label": "Executive Approval", "lane_id": "lane_legal"},
+            {"id": "n_std", "type": "user_task", "label": "Standard Review", "lane_id": "lane_legal"},
+            {"id": "n_end", "type": "end_event", "label": "Completed", "lane_id": "lane_legal"},
+        ],
+        transitions_json=[
+            {"from_node": "n_start", "to_node": "n_task", "label": "Begin"},
+            {"from_node": "n_task", "to_node": "n_gw", "label": "Route"},
+            {
+                "from_node": "n_gw",
+                "to_node": "n_app",
+                "label": "Confidential",
+                "condition": {"source": "document", "field": "classification", "op": "eq", "value": "confidential"},
+            },
+            {"from_node": "n_gw", "to_node": "n_std", "label": "Standard", "is_default": True},
+            {"from_node": "n_app", "to_node": "n_end", "label": "Signed"},
+            {"from_node": "n_std", "to_node": "n_end", "label": "Done"},
+        ],
+    )
+
+
+@pytest.fixture
+def draft_process_definition(db, tenant_a, admin_user, document_folder, org_unit_a):
+    """Fixture providing a draft BPM DocumentProcessDefinition in tenant_a."""
+    return DocumentProcessDefinition.objects.create(
+        tenant=tenant_a,
+        name="Draft OCR Triage Flow",
+        code="DBPM-TEST-DRAFT",
+        description="Editable draft process blueprint.",
+        process_category="ocr_classification",
+        trigger_event="ocr_completed",
+        target_document_type="all",
+        target_folder=document_folder,
+        department=org_unit_a,
+        owner=admin_user,
+        version_number=1,
+        status="draft",
+        is_active=True,
+        sla_target_hours=24,
+        swimlanes_json=[{"id": "lane_main", "name": "Operations", "role": "Operator"}],
+        nodes_json=[
+            {"id": "d_start", "type": "start_event", "label": "Start", "lane_id": "lane_main"},
+            {"id": "d_end", "type": "end_event", "label": "End", "lane_id": "lane_main"},
+        ],
+        transitions_json=[{"from_node": "d_start", "to_node": "d_end", "label": "Finish"}],
+    )
+
+
+@pytest.fixture
+def routing_rule(db, tenant_a, admin_user, process_definition, document_folder, org_unit_a):
+    """Fixture providing an active DocumentRoutingRule in tenant_a."""
+    return DocumentRoutingRule.objects.create(
+        tenant=tenant_a,
+        name="Confidential Contract Routing Rule",
+        description="Routes confidential documents to folder and auto-populates metadata.",
+        process_definition=process_definition,
+        rule_type="routing_distribution",
+        trigger_event="on_upload",
+        priority=10,
+        condition_logic_mode="all_and",
+        conditions_json=[
+            {"source": "document", "field": "classification", "op": "eq", "value": "internal"},
+        ],
+        auto_populate_json={
+            "document_fields": {"tags": "auto-routed"},
+            "metadata_fields": {"bpm_tier": "Standard"},
+        },
+        route_action="move_to_folder",
+        destination_folder=document_folder,
+        route_to_org_unit=org_unit_a,
+        route_to_user=admin_user,
+        is_active=True,
+        owner=admin_user,
+    )
+
+
+@pytest.fixture
+def process_instance(db, tenant_a, admin_user, process_definition, document, document_version, org_unit_a):
+    """Fixture providing a running DocumentProcessInstance via start_process_instance."""
+    from apps.documents.services.workflow_automation import start_process_instance
+
+    return start_process_instance(
+        tenant=tenant_a,
+        process_definition=process_definition,
+        document=document,
+        actor=admin_user,
+        version=document_version,
+        department=org_unit_a,
+        assignee=admin_user,
+        context_variables={"source": "pytest"},
+    )
+
+
+@pytest.fixture
+def webhook_trigger(db, tenant_a, admin_user, process_definition):
+    """Fixture providing an active outbound DocumentWebhookTrigger with encrypted secret."""
+    wh = DocumentWebhookTrigger(
+        tenant=tenant_a,
+        name="Test ERP Process Completed Hook",
+        description="Outbound webhook subscription for contract process completion.",
+        direction="outbound_webhook",
+        trigger_event="process.completed",
+        process_definition=process_definition,
+        target_url="https://hooks.partner-erp.example/naverp/dms-events",
+        http_method="post",
+        payload_format="cloudevents_json",
+        custom_headers={"X-NavERP-Test": "1"},
+        payload_template_json={"source": "naverp-test"},
+        retry_policy_max=5,
+        is_active=True,
+        owner=admin_user,
+    )
+    wh.generate_signing_secret()
+    wh.save()
+    return wh
+
 
 
 
