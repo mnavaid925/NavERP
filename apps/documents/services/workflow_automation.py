@@ -24,12 +24,35 @@ BLOCKED_WEBHOOK_HOSTNAMES = frozenset(
         "127.0.0.1",
         "::1",
         "0.0.0.0",
+        "metadata",
         "metadata.google.internal",
+        "instance-data",
         "169.254.169.254",
     }
 )
 BLOCKED_WEBHOOK_SUFFIXES = (".local", ".internal", ".localhost")
 _CGNAT_NETWORK = ipaddress.ip_network("100.64.0.0/10")
+_NAT64_NETWORK = ipaddress.ip_network("64:ff9b::/96")
+_NAT64_LOCAL_NETWORK = ipaddress.ip_network("64:ff9b:1::/48")
+_HEADER_NAME_RE = re.compile(r"^[!#$%&'*+\-.^_`|~0-9A-Za-z]{1,128}$")
+_FORBIDDEN_WEBHOOK_HEADERS = frozenset(
+    {
+        "host",
+        "authorization",
+        "proxy-authorization",
+        "cookie",
+        "set-cookie",
+        "content-length",
+        "transfer-encoding",
+        "connection",
+        "te",
+        "trailer",
+        "upgrade",
+        "x-naverp-signature-256",
+    }
+)
+_MAX_CUSTOM_HEADER_COUNT = 25
+_MAX_CUSTOM_HEADER_VALUE_LEN = 2048
 
 BPMN_NODE_TYPES = frozenset(
     {
@@ -80,6 +103,8 @@ def _unwrap_ip_targets(ip_obj):
                 stack.append(cur.sixtofour)
             if cur.teredo is not None:
                 stack.extend(cur.teredo)
+            if cur in _NAT64_NETWORK or cur in _NAT64_LOCAL_NETWORK:
+                stack.append(ipaddress.IPv4Address(int(cur) & 0xFFFFFFFF))
 
 
 def _is_blocked_ip(ip_obj):
@@ -155,21 +180,41 @@ def validate_dms_webhook_url(value):
 
 
 def validate_flat_headers(headers):
-    """Validate custom headers are a flat {str: str} mapping without CR/LF/NUL characters."""
+    """Validate custom headers as a bounded flat {str: str} RFC 7230 mapping."""
     if headers is None or headers == "":
         return {}
     if not isinstance(headers, dict):
         raise ValidationError("Custom headers must be a JSON object of string key-value pairs.")
+    if len(headers) > _MAX_CUSTOM_HEADER_COUNT:
+        raise ValidationError(f"At most {_MAX_CUSTOM_HEADER_COUNT} custom headers are allowed.")
     cleaned = {}
+    seen_lower = set()
     for key, val in headers.items():
         if not isinstance(key, str) or not isinstance(val, str):
             raise ValidationError("Every custom header key and value must be a flat string.")
-        if not key.strip():
+        stripped_key = key.strip()
+        if not stripped_key:
             raise ValidationError("Custom header names cannot be blank.")
         for text in (key, val):
             if "\r" in text or "\n" in text or "\x00" in text:
                 raise ValidationError("Custom headers must not contain CR, LF, or null bytes.")
-        cleaned[key.strip()] = val
+        if not _HEADER_NAME_RE.match(stripped_key):
+            raise ValidationError(
+                f"Custom header name '{stripped_key}' contains invalid RFC 7230 token characters or exceeds 128 chars."
+            )
+        lower_key = stripped_key.lower()
+        if lower_key in _FORBIDDEN_WEBHOOK_HEADERS:
+            raise ValidationError(
+                f"Header '{stripped_key}' is reserved and cannot be overridden via custom headers."
+            )
+        if lower_key in seen_lower:
+            raise ValidationError(f"Duplicate custom header '{stripped_key}' (case-insensitive).")
+        if len(val) > _MAX_CUSTOM_HEADER_VALUE_LEN:
+            raise ValidationError(
+                f"Value for header '{stripped_key}' exceeds {_MAX_CUSTOM_HEADER_VALUE_LEN} characters."
+            )
+        seen_lower.add(lower_key)
+        cleaned[stripped_key] = val
     return cleaned
 
 
@@ -1743,6 +1788,9 @@ def cancel_process_instance(instance, actor=None, notes="", request=None):
 def dispatch_simulated_webhook(trigger, event_name, payload_data, document=None, actor=None, request=None):
     """Build signed CloudEvents/JSON envelope and record honest local simulated delivery (L55)."""
     from apps.documents.services.audit import log_document_event
+
+    if trigger.target_url:
+        validate_dms_webhook_url(trigger.target_url)
 
     now = timezone.now()
     base_payload = dict(trigger.payload_template_json or {})
