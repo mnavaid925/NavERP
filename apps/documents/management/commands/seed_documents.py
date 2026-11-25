@@ -2197,13 +2197,25 @@ class Command(BaseCommand):
                         transitions_json=[
                             {"from_node": "n_start", "to_node": "n_ocr", "label": "Auto-extract"},
                             {"from_node": "n_ocr", "to_node": "n_gw", "label": "Evaluate risk"},
-                            {"from_node": "n_gw", "to_node": "n_legal", "label": "Confidential / High Value", "condition_label": "classification == confidential"},
+                            {
+                                "from_node": "n_gw",
+                                "to_node": "n_legal",
+                                "label": "Confidential / High Value",
+                                "condition": {
+                                    "source": "document",
+                                    "field": "classification",
+                                    "op": "in",
+                                    "value": ["confidential", "restricted"],
+                                },
+                            },
                             {"from_node": "n_gw", "to_node": "n_std", "label": "Standard", "is_default": True},
                             {"from_node": "n_legal", "to_node": "n_whk", "label": "Approved"},
                             {"from_node": "n_std", "to_node": "n_whk", "label": "Verified"},
                             {"from_node": "n_whk", "to_node": "n_end", "label": "Dispatched"},
                         ],
                     )
+                    if not proc_contract.validate_graph()["is_valid"]:
+                        raise ValueError(f"Seeded proc_contract failed BPMN validation: {proc_contract.validate_graph()}")
 
                     proc_policy = DocumentProcessDefinition.objects.create(
                         tenant=tenant,
@@ -2237,6 +2249,8 @@ class Command(BaseCommand):
                             {"from_node": "p_app", "to_node": "p_end", "label": "Ratified"},
                         ],
                     )
+                    if not proc_policy.validate_graph()["is_valid"]:
+                        raise ValueError(f"Seeded proc_policy failed BPMN validation: {proc_policy.validate_graph()}")
 
                     proc_ocr = DocumentProcessDefinition.objects.create(
                         tenant=tenant,
@@ -2337,14 +2351,14 @@ class Command(BaseCommand):
                     DocumentRoutingRule.objects.create(
                         tenant=tenant,
                         name="High-Confidence OCR Folder Distribution",
-                        description="Routes OCR-processed invoices above 0.80 confidence into repository folders and assigns custodian.",
+                        description="Routes OCR-processed reports above 80.0% confidence into repository folders and assigns custodian.",
                         rule_type="conditional_branch",
                         trigger_event="on_ocr_complete",
                         priority=30,
-                        target_document_type="invoice",
+                        target_document_type="report",
                         condition_logic_mode="all_and",
                         conditions_json=[
-                            {"source": "ocr", "field": "confidence_score", "op": "gte", "value": "0.80"},
+                            {"source": "ocr", "field": "confidence_score", "op": "gte", "value": "80.0"},
                         ],
                         route_action="move_to_folder",
                         destination_folder=folder_1,
