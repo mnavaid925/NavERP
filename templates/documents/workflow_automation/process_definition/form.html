@@ -111,18 +111,21 @@
                 <div class="form-group">
                     <label class="form-label" for="{{ form.swimlanes_json.id_for_label }}">Swimlanes (JSON Array)</label>
                     {{ form.swimlanes_json }}
+                    <div class="form-help">Schema: [{"id": "intake", "name": "Intake Lane", "color": "blue"}]</div>
                     {% if form.swimlanes_json.errors %}<div class="form-error">{{ form.swimlanes_json.errors }}</div>{% endif %}
                 </div>
 
                 <div class="form-group">
                     <label class="form-label" for="{{ form.nodes_json.id_for_label }}">BPMN Nodes (JSON Array)</label>
                     {{ form.nodes_json }}
+                    <div class="form-help">Supported types: start_event, user_task, service_task, approval_subprocess, exclusive_gateway, parallel_gateway, inclusive_gateway, timer_event, webhook_task, end_event.</div>
                     {% if form.nodes_json.errors %}<div class="form-error">{{ form.nodes_json.errors }}</div>{% endif %}
                 </div>
 
                 <div class="form-group">
                     <label class="form-label" for="{{ form.transitions_json.id_for_label }}">Transitions &amp; Gateways (JSON Array)</label>
                     {{ form.transitions_json }}
+                    <div class="form-help">Schema: [{"id": "t1", "from_node": "start", "to_node": "end", "is_default": true, "condition": {"source": "document", "field": "...", "op": "eq", "value": "..."}}]</div>
                     {% if form.transitions_json.errors %}<div class="form-error">{{ form.transitions_json.errors }}</div>{% endif %}
                 </div>
 
