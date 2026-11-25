@@ -722,10 +722,28 @@ def build_document_context(tenant, document):
     from apps.documents.models.MetadataIndexing.DocumentMetadataValues import DocumentMetadataValue
     from apps.documents.models.MetadataIndexing.DocumentOcrJobs import DocumentOcrJob
 
-    latest_ver = document.versions.filter(tenant=tenant).order_by("-created_at", "-id").first()
-    meta_qs = DocumentMetadataValue.objects.filter(
-        tenant=tenant, document=document, version__isnull=True
-    ).order_by("field_name")
+    latest_ver = (
+        document.versions.filter(tenant=tenant)
+        .order_by("-created_at", "-id")
+        .values("file_size", "file_name")
+        .first()
+    )
+    meta_qs = (
+        DocumentMetadataValue.objects.filter(
+            tenant=tenant, document=document, version__isnull=True
+        )
+        .only(
+            "id",
+            "field_name",
+            "data_type",
+            "value_text",
+            "value_number",
+            "value_date",
+            "value_boolean",
+            "value_json",
+        )
+        .order_by("field_name")
+    )
     metadata = {}
     for mv in meta_qs:
         metadata[mv.field_name] = _extract_metadata_value(mv)
@@ -733,14 +751,32 @@ def build_document_context(tenant, document):
     ocr_job = (
         DocumentOcrJob.objects.filter(tenant=tenant, document=document, status="completed")
         .order_by("-created_at", "-id")
+        .values("confidence_score", "suggested_category", "has_handwriting", "has_barcode")
         .first()
     )
     ocr_ctx = {
-        "confidence_score": float(ocr_job.confidence_score) if ocr_job and ocr_job.confidence_score is not None else None,
-        "suggested_category": ocr_job.suggested_category if ocr_job else "",
-        "has_handwriting": ocr_job.has_handwriting if ocr_job else False,
-        "has_barcode": ocr_job.has_barcode if ocr_job else False,
+        "confidence_score": float(ocr_job["confidence_score"])
+        if ocr_job and ocr_job["confidence_score"] is not None
+        else None,
+        "suggested_category": ocr_job["suggested_category"] if ocr_job else "",
+        "has_handwriting": ocr_job["has_handwriting"] if ocr_job else False,
+        "has_barcode": ocr_job["has_barcode"] if ocr_job else False,
     }
+
+    cached_dept = document._state.fields_cache.get("department") if document.department_id else None
+    cached_owner = document._state.fields_cache.get("owner") if document.owner_id else None
+    if (document.department_id and cached_dept is None) or (document.owner_id and cached_owner is None):
+        row = (
+            document._meta.model.objects.filter(pk=document.pk)
+            .values_list("department__name", "owner__username")
+            .first()
+            or ("", "")
+        )
+        dept_name = row[0] or ""
+        owner_username = row[1] or ""
+    else:
+        dept_name = cached_dept.name if cached_dept is not None else ""
+        owner_username = cached_owner.username if cached_owner is not None else ""
 
     doc_ctx = {
         "number": document.number,
@@ -751,12 +787,12 @@ def build_document_context(tenant, document):
         "tags": document.tags,
         "current_version_label": document.current_version_label,
         "current_version_no": document.current_version_no,
-        "department": document.department.name if document.department_id else "",
+        "department": dept_name,
         "department_id": document.department_id,
-        "owner": document.owner.username if document.owner_id else "",
+        "owner": owner_username,
         "is_locked": document.is_locked,
-        "file_size": latest_ver.file_size if latest_ver else 0,
-        "file_name": latest_ver.file_name if latest_ver else "",
+        "file_size": latest_ver["file_size"] if latest_ver else 0,
+        "file_name": latest_ver["file_name"] if latest_ver else "",
     }
     return {"document": doc_ctx, "metadata": metadata, "ocr": ocr_ctx, "context": doc_ctx}
 
@@ -907,6 +943,7 @@ def _execute_route_action(
     process_definition=None,
     actor=None,
     request=None,
+    emit_move_audit=True,
 ):
     """Execute one supported DocumentRoutingRule action with tenant verification."""
     from apps.documents.models.CollaborationSharing.DocumentTasks import DocumentTask
@@ -922,14 +959,15 @@ def _execute_route_action(
     if action_name == "move_to_folder" and destination_folder is not None:
         _apply_folder_routing(tenant, document, destination_folder, actor=actor)
         applied.append(f"filed->{destination_folder.path}")
-        log_document_event(
-            tenant=tenant,
-            action_type="moved",
-            document=document,
-            actor=actor,
-            request=request,
-            details={"bpm_event": "routing.moved_to_folder", "rule": rule.number, "folder": destination_folder.path},
-        )
+        if emit_move_audit:
+            log_document_event(
+                tenant=tenant,
+                action_type="moved",
+                document=document,
+                actor=actor,
+                request=request,
+                details={"bpm_event": "routing.moved_to_folder", "rule": rule.number, "folder": destination_folder.path},
+            )
     elif action_name == "assign_user" and route_to_user is not None:
         document.owner = route_to_user
         document.save(update_fields=["owner", "updated_at"])
@@ -1025,8 +1063,10 @@ def evaluate_routing_rules(
     if rules is None:
         qs = DocumentRoutingRule.objects.filter(tenant=tenant, is_active=True).select_related(
             "process_definition",
+            "process_definition__department",
             "source_folder",
             "destination_folder",
+            "destination_folder__department",
             "route_to_org_unit",
             "route_to_role",
             "route_to_user",
@@ -1038,6 +1078,7 @@ def evaluate_routing_rules(
     doc_ctx = build_document_context(tenant, document)
     User = get_user_model()
     results = []
+    unmatched_rule_ids = []
 
     for rule in rules:
         _assert_same_tenant(tenant, rule, "Routing rule")
@@ -1136,152 +1177,165 @@ def evaluate_routing_rules(
 
         applied_actions = []
         if apply_mutations:
-            with transaction.atomic():
-                now = timezone.now()
-                update_kwargs = {"execution_count": F("execution_count") + 1, "last_evaluated_at": now}
-                if scope_ok and cond_matched:
-                    update_kwargs["match_count"] = F("match_count") + 1
-                DocumentRoutingRule.objects.filter(pk=rule.pk).update(**update_kwargs)
+            if not (scope_ok and cond_matched) and not used_else:
+                unmatched_rule_ids.append(rule.pk)
+            else:
+                with transaction.atomic():
+                    now = timezone.now()
+                    update_kwargs = {"execution_count": F("execution_count") + 1, "last_evaluated_at": now}
+                    if scope_ok and cond_matched:
+                        update_kwargs["match_count"] = F("match_count") + 1
+                    DocumentRoutingRule.objects.filter(pk=rule.pk).update(**update_kwargs)
 
-                if scope_ok and cond_matched and not validation_errors:
-                    pop_changes = _apply_auto_populate(tenant, document, rule.auto_populate_json, actor=actor)
-                    applied_actions.extend(pop_changes)
-                    applied_actions.extend(
-                        _execute_route_action(
-                            tenant=tenant,
-                            document=document,
-                            rule=rule,
-                            action_name=rule.route_action,
-                            User=User,
-                            destination_folder=rule.destination_folder,
-                            route_to_org_unit=rule.route_to_org_unit,
-                            route_to_role=rule.route_to_role,
-                            route_to_user=rule.route_to_user,
-                            process_definition=rule.process_definition,
-                            actor=actor,
-                            request=request,
-                        )
-                    )
-
-                    if pop_changes or applied_actions:
-                        log_document_event(
-                            tenant=tenant,
-                            action_type="edited",
-                            document=document,
-                            actor=actor,
-                            request=request,
-                            details={
-                                "bpm_event": "routing.matched",
-                                "rule": rule.number,
-                                "action": rule.route_action,
-                                "changes": applied_actions,
-                            },
-                        )
-                    _dispatch_event_webhooks(
-                        tenant=tenant,
-                        event_name="routing.matched",
-                        payload_data={
-                            "rule": rule.number,
-                            "rule_name": rule.name,
-                            "document": document.number,
-                            "action": rule.route_action,
-                            "changes": applied_actions,
-                        },
-                        process_definition_id=rule.process_definition_id,
-                        document=document,
-                        actor=actor,
-                        request=request,
-                    )
-                elif scope_ok and cond_matched and validation_errors:
-                    log_document_event(
-                        tenant=tenant,
-                        action_type="workflow_rejected",
-                        document=document,
-                        actor=actor,
-                        request=request,
-                        is_success=False,
-                        failure_reason="routing_validation_failed",
-                        details={"bpm_event": "routing.validation_blocked", "rule": rule.number, "errors": validation_errors},
-                    )
-                elif used_else:
-                    else_cfg = rule.else_action_json or {}
-                    pop_changes = []
-                    if isinstance(else_cfg, dict) and (
-                        else_cfg.get("metadata_fields") or else_cfg.get("document_fields")
-                    ):
-                        pop_changes = _apply_auto_populate(tenant, document, else_cfg, actor=actor)
+                    if scope_ok and cond_matched and not validation_errors:
+                        pop_changes = _apply_auto_populate(tenant, document, rule.auto_populate_json, actor=actor)
                         applied_actions.extend(pop_changes)
-
-                    else_ra = str(else_cfg.get("route_action") or "").strip() if isinstance(else_cfg, dict) else ""
-                    if else_ra and else_ra != "else_fallback":
-                        if else_ra not in SUPPORTED_ELSE_ROUTE_ACTIONS:
-                            raise ValidationError(f"Unsupported else route_action '{else_ra}' on rule {rule.number}.")
-                        else_folder = _resolve_else_fk(
-                            tenant,
-                            DocumentFolder,
-                            else_cfg.get("destination_folder_id"),
-                            rule.destination_folder,
-                            "Else destination folder",
-                        )
-                        else_org = _resolve_else_fk(
-                            tenant,
-                            OrgUnit,
-                            else_cfg.get("route_to_org_unit_id"),
-                            rule.route_to_org_unit,
-                            "Else org unit",
-                        )
-                        else_role = _resolve_else_fk(
-                            tenant,
-                            Role,
-                            else_cfg.get("route_to_role_id"),
-                            rule.route_to_role,
-                            "Else role",
-                        )
-                        else_user = _resolve_else_fk(
-                            tenant,
-                            User,
-                            else_cfg.get("route_to_user_id"),
-                            rule.route_to_user,
-                            "Else user",
-                            require_active=True,
-                        )
-                        else_proc = _resolve_else_fk(
-                            tenant,
-                            DocumentProcessDefinition,
-                            else_cfg.get("process_definition_id"),
-                            rule.process_definition,
-                            "Else process definition",
-                        )
                         applied_actions.extend(
                             _execute_route_action(
                                 tenant=tenant,
                                 document=document,
                                 rule=rule,
-                                action_name=else_ra,
+                                action_name=rule.route_action,
                                 User=User,
-                                destination_folder=else_folder,
-                                route_to_org_unit=else_org,
-                                route_to_role=else_role,
-                                route_to_user=else_user,
-                                process_definition=else_proc,
+                                destination_folder=rule.destination_folder,
+                                route_to_org_unit=rule.route_to_org_unit,
+                                route_to_role=rule.route_to_role,
+                                route_to_user=rule.route_to_user,
+                                process_definition=rule.process_definition,
                                 actor=actor,
                                 request=request,
+                                emit_move_audit=False,
                             )
                         )
-                    if pop_changes or applied_actions:
-                        log_document_event(
+
+                        if pop_changes or applied_actions:
+                            moved_folder = (
+                                rule.destination_folder.path
+                                if rule.route_action == "move_to_folder" and rule.destination_folder_id
+                                else ""
+                            )
+                            audit_details = {
+                                "bpm_event": "routing.matched",
+                                "rule": rule.number,
+                                "action": rule.route_action,
+                                "changes": applied_actions,
+                            }
+                            if moved_folder:
+                                audit_details["folder"] = moved_folder
+                            log_document_event(
+                                tenant=tenant,
+                                action_type="moved" if moved_folder else "edited",
+                                document=document,
+                                actor=actor,
+                                request=request,
+                                details=audit_details,
+                            )
+                        _dispatch_event_webhooks(
                             tenant=tenant,
-                            action_type="edited",
+                            event_name="routing.matched",
+                            payload_data={
+                                "rule": rule.number,
+                                "rule_name": rule.name,
+                                "document": document.number,
+                                "action": rule.route_action,
+                                "changes": applied_actions,
+                            },
+                            process_definition_id=rule.process_definition_id,
                             document=document,
                             actor=actor,
                             request=request,
-                            details={
-                                "bpm_event": "routing.else_fallback",
-                                "rule": rule.number,
-                                "action": else_ra or "else_fallback",
-                                "changes": applied_actions,
-                            },
                         )
+                    elif scope_ok and cond_matched and validation_errors:
+                        log_document_event(
+                            tenant=tenant,
+                            action_type="workflow_rejected",
+                            document=document,
+                            actor=actor,
+                            request=request,
+                            is_success=False,
+                            failure_reason="routing_validation_failed",
+                            details={"bpm_event": "routing.validation_blocked", "rule": rule.number, "errors": validation_errors},
+                        )
+                    elif used_else:
+                        else_cfg = rule.else_action_json or {}
+                        pop_changes = []
+                        if isinstance(else_cfg, dict) and (
+                            else_cfg.get("metadata_fields") or else_cfg.get("document_fields")
+                        ):
+                            pop_changes = _apply_auto_populate(tenant, document, else_cfg, actor=actor)
+                            applied_actions.extend(pop_changes)
+
+                        else_ra = str(else_cfg.get("route_action") or "").strip() if isinstance(else_cfg, dict) else ""
+                        if else_ra and else_ra != "else_fallback":
+                            if else_ra not in SUPPORTED_ELSE_ROUTE_ACTIONS:
+                                raise ValidationError(f"Unsupported else route_action '{else_ra}' on rule {rule.number}.")
+                            else_folder = _resolve_else_fk(
+                                tenant,
+                                DocumentFolder,
+                                else_cfg.get("destination_folder_id"),
+                                rule.destination_folder,
+                                "Else destination folder",
+                            )
+                            else_org = _resolve_else_fk(
+                                tenant,
+                                OrgUnit,
+                                else_cfg.get("route_to_org_unit_id"),
+                                rule.route_to_org_unit,
+                                "Else org unit",
+                            )
+                            else_role = _resolve_else_fk(
+                                tenant,
+                                Role,
+                                else_cfg.get("route_to_role_id"),
+                                rule.route_to_role,
+                                "Else role",
+                            )
+                            else_user = _resolve_else_fk(
+                                tenant,
+                                User,
+                                else_cfg.get("route_to_user_id"),
+                                rule.route_to_user,
+                                "Else user",
+                                require_active=True,
+                            )
+                            else_proc = _resolve_else_fk(
+                                tenant,
+                                DocumentProcessDefinition,
+                                else_cfg.get("process_definition_id"),
+                                rule.process_definition,
+                                "Else process definition",
+                            )
+                            applied_actions.extend(
+                                _execute_route_action(
+                                    tenant=tenant,
+                                    document=document,
+                                    rule=rule,
+                                    action_name=else_ra,
+                                    User=User,
+                                    destination_folder=else_folder,
+                                    route_to_org_unit=else_org,
+                                    route_to_role=else_role,
+                                    route_to_user=else_user,
+                                    process_definition=else_proc,
+                                    actor=actor,
+                                    request=request,
+                                    emit_move_audit=False,
+                                )
+                            )
+                        if pop_changes or applied_actions:
+                            log_document_event(
+                                tenant=tenant,
+                                action_type="moved" if else_ra == "move_to_folder" and else_folder else "edited",
+                                document=document,
+                                actor=actor,
+                                request=request,
+                                details={
+                                    "bpm_event": "routing.else_fallback",
+                                    "rule": rule.number,
+                                    "action": else_ra or "else_fallback",
+                                    "changes": applied_actions,
+                                },
+                            )
 
         results.append(
             {
@@ -1295,6 +1349,12 @@ def evaluate_routing_rules(
                 "effective_action": effective_action,
                 "applied_actions": applied_actions,
             }
+        )
+
+    if apply_mutations and unmatched_rule_ids:
+        DocumentRoutingRule.objects.filter(pk__in=unmatched_rule_ids).update(
+            execution_count=F("execution_count") + 1,
+            last_evaluated_at=timezone.now(),
         )
 
     return results
