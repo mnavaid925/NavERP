@@ -2,7 +2,6 @@ import json
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Count, Q, Sum
 from django.shortcuts import redirect, render
@@ -19,7 +18,12 @@ from apps.documents.models.WorkflowAutomation.DocumentProcessDefinitions import 
 )
 from apps.documents.models.WorkflowAutomation.DocumentRoutingRules import DocumentRoutingRule
 from apps.documents.services.workflow_automation import evaluate_routing_rules
-from apps.documents.views._common import documents_object, documents_scope
+from apps.documents.views._common import (
+    documents_object,
+    documents_scope,
+    paginate_queryset,
+    parse_int_param,
+)
 
 
 @login_required
@@ -71,9 +75,9 @@ def routing_rule_list(request):
     elif status == "inactive":
         qs = qs.filter(is_active=False)
 
-    process_definition_id = request.GET.get("process_definition", "").strip()
-    if process_definition_id and process_definition_id.isdigit():
-        qs = qs.filter(process_definition_id=int(process_definition_id))
+    process_definition_id, proc_int_id = parse_int_param(request.GET.get("process_definition"))
+    if proc_int_id is not None:
+        qs = qs.filter(process_definition_id=proc_int_id)
 
     stats = qs.aggregate(
         total_count=Count("id"),
@@ -81,8 +85,7 @@ def routing_rule_list(request):
         total_matches=Sum("match_count"),
     )
 
-    paginator = Paginator(qs, 15)
-    page_obj = paginator.get_page(request.GET.get("page"))
+    page_obj = paginate_queryset(qs, request, per_page=15)
 
     process_definitions = (
         DocumentProcessDefinition.objects.filter(tenant=request.tenant)
@@ -153,9 +156,9 @@ def routing_rule_create(request):
             return redirect("documents:routing_rule_detail", pk=rule.pk)
     else:
         initial = {}
-        proc_id = request.GET.get("process_definition", "").strip()
-        if proc_id and proc_id.isdigit():
-            initial["process_definition"] = int(proc_id)
+        _, proc_id = parse_int_param(request.GET.get("process_definition"))
+        if proc_id is not None:
+            initial["process_definition"] = proc_id
         initial["conditions_json"] = json.dumps(
             [{"source": "document", "field": "classification", "op": "eq", "value": "confidential"}],
             indent=2,
@@ -288,12 +291,12 @@ def routing_rule_simulator(request):
                 )
     else:
         initial = {}
-        rule_id = request.GET.get("rule", "").strip()
-        if rule_id and rule_id.isdigit():
-            initial["rule"] = int(rule_id)
-        doc_id = request.GET.get("document", "").strip()
-        if doc_id and doc_id.isdigit():
-            initial["document"] = int(doc_id)
+        _, rule_id = parse_int_param(request.GET.get("rule"))
+        if rule_id is not None:
+            initial["rule"] = rule_id
+        _, doc_id = parse_int_param(request.GET.get("document"))
+        if doc_id is not None:
+            initial["document"] = doc_id
         form = RoutingRuleSimulatorForm(tenant=request.tenant, initial=initial)
 
     context = {
