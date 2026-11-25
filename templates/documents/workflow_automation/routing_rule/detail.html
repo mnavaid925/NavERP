@@ -114,7 +114,7 @@
                             <td class="font-mono text-xs">{{ c.source|default:"document" }}</td>
                             <td class="font-mono text-xs font-semibold">{{ c.field }}</td>
                             <td><span class="badge badge-slate font-mono">{{ c.op }}</span></td>
-                            <td class="font-mono text-xs">{{ c.value }}</td>
+                            <td class="font-mono text-xs">{{ c.value_display|default:"—" }}</td>
                         </tr>
                         {% empty %}
                         <tr><td colspan="4" class="text-center text-xs text-slate-500 dark:text-slate-400 py-4">No conditional predicates (matches all documents within scope).</td></tr>
@@ -132,7 +132,7 @@
                 <div>
                     <div class="font-semibold text-slate-700 dark:text-slate-200 mb-1">Validation Rules ({{ validation_rules|length }})</div>
                     {% for v in validation_rules %}
-                    <div class="p-2 rounded border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 mb-1 font-mono">{{ v }}</div>
+                    <pre class="p-2 rounded border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 mb-1 font-mono whitespace-pre-wrap overflow-x-auto">{{ v }}</pre>
                     {% empty %}
                     <p class="text-slate-500 dark:text-slate-400">No pre-transition validation gates configured.</p>
                     {% endfor %}
