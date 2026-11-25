@@ -133,27 +133,27 @@
             <tbody>
                 {% for rule in routing_rules %}
                 <tr>
-                    <td class="font-mono font-semibold text-slate-700">P{{ rule.priority }}</td>
+                    <td class="font-mono font-semibold text-slate-700 dark:text-slate-200">P{{ rule.priority }}</td>
                     <td>
-                        <a href="{% url 'documents:routing_rule_detail' rule.pk %}" class="font-semibold text-blue-600 hover:underline">
+                        <a href="{% url 'documents:routing_rule_detail' rule.pk %}" class="font-semibold text-blue-600 dark:text-blue-400 hover:underline">
                             {{ rule.name }}
                         </a>
-                        <div class="text-xs text-slate-500 font-mono">{{ rule.number }}</div>
+                        <div class="text-xs text-slate-500 dark:text-slate-400 font-mono">{{ rule.number }}</div>
                     </td>
                     <td><span class="badge {{ rule.rule_type_badge }}">{{ rule.get_rule_type_display }}</span></td>
-                    <td class="text-xs text-slate-700">
+                    <td class="text-xs text-slate-700 dark:text-slate-200">
                         <div>{{ rule.get_trigger_event_display }}</div>
-                        <div class="text-slate-500">{{ rule.get_condition_logic_mode_display }} · {{ rule.condition_count }} clauses</div>
+                        <div class="text-slate-500 dark:text-slate-400">{{ rule.get_condition_logic_mode_display }} · {{ rule.condition_count }} clauses</div>
                     </td>
                     <td>
                         <span class="badge {{ rule.route_action_badge }}">{{ rule.get_route_action_display }}</span>
                         {% if rule.destination_folder %}
-                        <div class="text-xs text-slate-500 font-mono mt-0.5">{{ rule.destination_folder.path }}</div>
+                        <div class="text-xs text-slate-500 dark:text-slate-400 font-mono mt-0.5">{{ rule.destination_folder.path }}</div>
                         {% elif rule.route_to_org_unit %}
-                        <div class="text-xs text-slate-500 mt-0.5">{{ rule.route_to_org_unit.name }}</div>
+                        <div class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{{ rule.route_to_org_unit.name }}</div>
                         {% endif %}
                     </td>
-                    <td class="text-xs font-mono text-slate-700">{{ rule.match_count }} / {{ rule.execution_count }} ({{ rule.match_rate_pct }}%)</td>
+                    <td class="text-xs font-mono text-slate-700 dark:text-slate-200">{{ rule.match_count }} / {{ rule.execution_count }} ({{ rule.match_rate_pct }}%)</td>
                     <td>
                         <span class="badge {{ rule.active_badge }}">
                             {% if rule.is_active %}Active{% else %}Paused{% endif %}
@@ -183,9 +183,9 @@
                 <tr>
                     <td colspan="8">
                         <div class="empty-state">
-                            <i data-lucide="split" class="w-10 h-10 text-slate-300 mx-auto mb-2"></i>
-                            <p class="font-medium text-slate-700">No routing rules found</p>
-                            <p class="text-xs text-slate-500 mb-3">Create priority-ordered conditional rules to auto-file, validate, and route documents.</p>
+                            <i data-lucide="split" class="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto mb-2"></i>
+                            <p class="font-medium text-slate-700 dark:text-slate-200">No routing rules found</p>
+                            <p class="text-xs text-slate-500 dark:text-slate-400 mb-3">Create priority-ordered conditional rules to auto-file, validate, and route documents.</p>
                             <a href="{% url 'documents:routing_rule_create' %}" class="btn btn-primary btn-sm">New Routing Rule</a>
                         </div>
                     </td>
