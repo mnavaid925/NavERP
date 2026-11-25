@@ -161,6 +161,7 @@ class DocumentWebhookTrigger(TenantNumbered):
             models.Index(fields=["tenant", "direction"], name="doc_dwhk_tnt_dir_idx"),
             models.Index(fields=["tenant", "is_active"], name="doc_dwhk_tnt_act_idx"),
             models.Index(fields=["tenant", "last_status"], name="doc_dwhk_tnt_sts_idx"),
+            models.Index(fields=["tenant", "is_active", "trigger_event"], name="doc_dwhk_tnt_act_evt_idx"),
         ]
 
     def __str__(self):
