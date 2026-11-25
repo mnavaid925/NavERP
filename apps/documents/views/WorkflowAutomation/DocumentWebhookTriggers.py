@@ -117,6 +117,7 @@ def webhook_trigger_detail(request, pk):
 
 
 @login_required
+@tenant_admin_required
 def webhook_trigger_create(request):
     if request.method == "POST":
         form = DocumentWebhookTriggerForm(request.POST, tenant=request.tenant)
@@ -149,6 +150,7 @@ def webhook_trigger_create(request):
 
 
 @login_required
+@tenant_admin_required
 def webhook_trigger_edit(request, pk):
     webhook = documents_object(request, DocumentWebhookTrigger, pk)
     if request.method == "POST":
