@@ -47,10 +47,11 @@
                     {% if form.trigger_event.errors %}<div class="form-error">{{ form.trigger_event.errors }}</div>{% endif %}
                 </div>
                 {% if user.is_superuser or user.is_tenant_admin %}
-                <div class="form-group flex items-center gap-2">
+                <div class="form-group flex-row items-center gap-2">
                     {{ form.apply_mutations }}
                     <label class="form-label mb-0" for="{{ form.apply_mutations.id_for_label }}">Apply Live Mutations (Tags, Metadata, Workflows)</label>
                 </div>
+                {% if form.apply_mutations.errors %}<div class="form-error">{{ form.apply_mutations.errors }}</div>{% endif %}
                 {% else %}
                 <div class="text-xs text-slate-500 dark:text-slate-400">Dry-run mode only (live mutation requires tenant admin).</div>
                 {% endif %}
