@@ -9,6 +9,7 @@ from apps.documents.models.StorageRepository.DocumentFolders import DocumentFold
 from apps.documents.models.WorkflowAutomation.DocumentProcessDefinitions import (
     DocumentProcessDefinition,
 )
+from apps.documents.services.workflow_automation import validate_process_graph
 
 
 def _parse_json_list(val, field_label):
@@ -123,6 +124,19 @@ class DocumentProcessDefinitionForm(TenantUniqueMixin, TenantModelForm):
                     "code",
                     f"Process code '{code}' v{version_number} already exists in this workspace.",
                 )
+        if (
+            not self.errors
+            and self.instance
+            and self.instance.pk
+            and self.instance.status == "published"
+        ):
+            graph_res = validate_process_graph(
+                cleaned.get("swimlanes_json") or [],
+                cleaned.get("nodes_json") or [],
+                cleaned.get("transitions_json") or [],
+            )
+            if not graph_res["is_valid"]:
+                raise ValidationError(graph_res["errors"])
         return cleaned
 
 
@@ -151,3 +165,15 @@ class ProcessDesignerForm(forms.Form):
 
     def clean_transitions_json(self):
         return _parse_json_list(self.cleaned_data.get("transitions_json"), "transitions")
+
+    def clean(self):
+        cleaned = super().clean()
+        if not self.errors:
+            graph_res = validate_process_graph(
+                cleaned.get("swimlanes_json") or [],
+                cleaned.get("nodes_json") or [],
+                cleaned.get("transitions_json") or [],
+            )
+            if not graph_res["is_valid"]:
+                raise ValidationError(graph_res["errors"])
+        return cleaned
