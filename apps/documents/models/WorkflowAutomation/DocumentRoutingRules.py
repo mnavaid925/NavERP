@@ -205,6 +205,11 @@ class DocumentRoutingRule(TenantNumbered):
             models.Index(fields=["tenant", "trigger_event"], name="doc_drul_tnt_trg_idx"),
             models.Index(fields=["tenant", "is_active"], name="doc_drul_tnt_act_idx"),
             models.Index(fields=["tenant", "process_definition"], name="doc_drul_tnt_prc_idx"),
+            models.Index(
+                fields=["tenant", "is_active", "trigger_event", "priority"],
+                name="doc_drul_tnt_act_trg_pri_idx",
+            ),
+            models.Index(fields=["tenant", "route_action"], name="doc_drul_tnt_rca_idx"),
         ]
 
     def __str__(self):
