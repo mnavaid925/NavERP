@@ -779,17 +779,25 @@ def evaluate_routing_rules(
                         )
                         applied_actions.append(f"spawned_dwf->{wf.number}")
                     elif rule.route_action == "trigger_process" and rule.process_definition_id:
-                        inst = start_process_instance(
-                            tenant=tenant,
-                            process_definition=rule.process_definition,
-                            document=document,
-                            actor=actor,
-                            department=rule.route_to_org_unit or document.department,
-                            assignee=rule.route_to_user,
-                            triggered_by_rule=rule,
-                            request=request,
-                        )
-                        applied_actions.append(f"started_dpin->{inst.number}")
+                        if (
+                            rule.process_definition.status == "published"
+                            and rule.process_definition.is_active
+                        ):
+                            inst = start_process_instance(
+                                tenant=tenant,
+                                process_definition=rule.process_definition,
+                                document=document,
+                                actor=actor,
+                                department=rule.route_to_org_unit or document.department,
+                                assignee=rule.route_to_user,
+                                triggered_by_rule=rule,
+                                request=request,
+                            )
+                            applied_actions.append(f"started_dpin->{inst.number}")
+                        else:
+                            applied_actions.append(
+                                f"skipped_dpin({rule.process_definition.number}:not_published)"
+                            )
 
                     if pop_changes or applied_actions:
                         log_document_event(
@@ -867,6 +875,11 @@ def start_process_instance(
     from apps.documents.models.WorkflowAutomation.DocumentProcessInstances import DocumentProcessInstance
     from apps.documents.models.WorkflowAutomation.DocumentWebhookTriggers import DocumentWebhookTrigger
     from apps.documents.services.audit import log_document_event
+
+    if process_definition.status != "published" or not process_definition.is_active:
+        raise ValidationError(
+            "Only active, published process definitions can be launched."
+        )
 
     now = timezone.now()
     nodes = process_definition.nodes_json or []
