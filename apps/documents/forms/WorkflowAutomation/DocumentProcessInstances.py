@@ -42,9 +42,14 @@ class DocumentProcessInstanceForm(TenantUniqueMixin, TenantModelForm):
         super().__init__(*args, **kwargs)
         User = get_user_model()
         if self.tenant:
-            self.fields["process_definition"].queryset = DocumentProcessDefinition.objects.filter(
-                tenant=self.tenant
-            ).order_by("code", "-version_number")
+            if self.instance and self.instance.pk and self.instance.process_definition_id:
+                self.fields["process_definition"].queryset = DocumentProcessDefinition.objects.filter(
+                    tenant=self.tenant, pk=self.instance.process_definition_id
+                )
+            else:
+                self.fields["process_definition"].queryset = DocumentProcessDefinition.objects.filter(
+                    tenant=self.tenant, status="published", is_active=True
+                ).order_by("code", "-version_number")
             self.fields["document"].queryset = Document.objects.filter(
                 tenant=self.tenant
             ).order_by("-created_at", "title")
@@ -94,6 +99,13 @@ class DocumentProcessInstanceForm(TenantUniqueMixin, TenantModelForm):
         ver = cleaned.get("version")
         if doc and ver and ver.document_id != doc.id:
             self.add_error("version", "Selected version does not belong to the chosen document.")
+        proc = cleaned.get("process_definition")
+        if proc and not (self.instance and self.instance.pk):
+            if proc.status != "published" or not proc.is_active:
+                self.add_error(
+                    "process_definition",
+                    "Only active, published process definitions can be launched.",
+                )
         return cleaned
 
 
