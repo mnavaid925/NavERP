@@ -444,7 +444,7 @@ def _close_active_trace_step(trace, now, outcome, notes=""):
         trace[-1]["notes"] = notes[:200]
 
 
-def _dispatch_process_webhooks(
+def _dispatch_event_webhooks(
     tenant,
     event_name,
     payload_data,
@@ -453,19 +453,32 @@ def _dispatch_process_webhooks(
     actor=None,
     request=None,
 ):
-    """Dispatch active simulated webhooks for a BPM lifecycle event."""
+    """Dispatch active outbound/callback webhooks matching event, process, and document type."""
     from apps.documents.models.WorkflowAutomation.DocumentWebhookTriggers import (
         DocumentWebhookTrigger,
     )
 
-    webhooks = DocumentWebhookTrigger.objects.filter(
+    qs = DocumentWebhookTrigger.objects.filter(
         tenant=tenant,
         is_active=True,
+        direction__in=("outbound_webhook", "middleware_callback"),
         trigger_event=event_name,
     ).select_related("tenant")
-    for wh in webhooks:
-        if wh.process_definition_id and process_definition_id and wh.process_definition_id != process_definition_id:
-            continue
+
+    if process_definition_id:
+        qs = qs.filter(
+            Q(process_definition__isnull=True) | Q(process_definition_id=process_definition_id)
+        )
+    else:
+        qs = qs.filter(process_definition__isnull=True)
+
+    doc_type = getattr(document, "document_type", "") if document is not None else ""
+    if doc_type:
+        qs = qs.filter(Q(filter_document_type="") | Q(filter_document_type=doc_type))
+    else:
+        qs = qs.filter(filter_document_type="")
+
+    for wh in qs:
         dispatch_simulated_webhook(
             wh,
             event_name,
@@ -917,6 +930,21 @@ def evaluate_routing_rules(
                                 "changes": applied_actions,
                             },
                         )
+                    _dispatch_event_webhooks(
+                        tenant=tenant,
+                        event_name="routing.matched",
+                        payload_data={
+                            "rule": rule.number,
+                            "rule_name": rule.name,
+                            "document": document.number,
+                            "action": rule.route_action,
+                            "changes": applied_actions,
+                        },
+                        process_definition_id=rule.process_definition_id,
+                        document=document,
+                        actor=actor,
+                        request=request,
+                    )
                 elif scope_ok and cond_matched and validation_errors:
                     log_document_event(
                         tenant=tenant,
@@ -1096,7 +1124,7 @@ def start_process_instance(
             request=request,
             details={"bpm_event": "process.started", "instance": instance.number, "process": process_definition.number},
         )
-        _dispatch_process_webhooks(
+        _dispatch_event_webhooks(
             tenant=tenant,
             event_name="process.started",
             payload_data={"instance": instance.number, "document": document.number, "process": process_definition.number},
@@ -1105,6 +1133,25 @@ def start_process_instance(
             actor=actor,
             request=request,
         )
+        if status == "completed":
+            log_document_event(
+                tenant=tenant,
+                action_type="workflow_approved",
+                document=document,
+                version=version,
+                actor=actor,
+                request=request,
+                details={"bpm_event": "process.completed", "instance": instance.number},
+            )
+            _dispatch_event_webhooks(
+                tenant=tenant,
+                event_name="process.completed",
+                payload_data={"instance": instance.number, "document": document.number, "cycle_time_minutes": 0},
+                process_definition_id=process_definition.id,
+                document=document,
+                actor=actor,
+                request=request,
+            )
     return instance
 
 
@@ -1175,7 +1222,7 @@ def advance_process_instance(instance, outcome="approved", actor=None, notes="",
                     "notes": (notes or "")[:200],
                 },
             )
-            _dispatch_process_webhooks(
+            _dispatch_event_webhooks(
                 tenant=locked.tenant,
                 event_name="process.sla_breached",
                 payload_data={
@@ -1309,7 +1356,7 @@ def advance_process_instance(instance, outcome="approved", actor=None, notes="",
                 request=request,
                 details={"bpm_event": "process.completed", "instance": locked.number},
             )
-            _dispatch_process_webhooks(
+            _dispatch_event_webhooks(
                 tenant=locked.tenant,
                 event_name="process.completed",
                 payload_data={
