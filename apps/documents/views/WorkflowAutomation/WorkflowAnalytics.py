@@ -1,3 +1,4 @@
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render
 
@@ -22,6 +23,12 @@ def process_analytics_dashboard(request):
     date_to_str = request.GET.get("date_to", "").strip()
     date_from = safe_parse_date(date_from_str) if date_from_str else None
     date_to = safe_parse_date(date_to_str) if date_to_str else None
+
+    if date_from and date_to and date_from > date_to:
+        messages.warning(
+            request,
+            "Invalid date range: 'Started From' cannot be after 'Started To'.",
+        )
 
     analytics = compute_process_analytics(
         tenant=request.tenant,
