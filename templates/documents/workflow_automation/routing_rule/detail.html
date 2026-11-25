@@ -31,7 +31,7 @@
     <div class="lg:col-span-2 space-y-6">
         <div class="card">
             <div class="card-header">
-                <h2 class="text-base font-semibold text-slate-800">Rule Specification</h2>
+                <h2 class="text-base font-semibold text-slate-800 dark:text-slate-100">Rule Specification</h2>
             </div>
             <div class="card-body">
                 <dl class="detail-grid">
@@ -59,7 +59,7 @@
                         <dt>Linked BPM Process</dt>
                         <dd>
                             {% if rule.process_definition %}
-                            <a href="{% url 'documents:process_definition_detail' rule.process_definition.pk %}" class="text-blue-600 hover:underline">{{ rule.process_definition.name }}</a>
+                            <a href="{% url 'documents:process_definition_detail' rule.process_definition.pk %}" class="text-blue-600 dark:text-blue-400 hover:underline">{{ rule.process_definition.name }}</a>
                             {% else %}—{% endif %}
                         </dd>
                     </div>
@@ -86,9 +86,9 @@
                     </div>
                 </dl>
                 {% if rule.description %}
-                <div class="mt-4 pt-4 border-t border-slate-100">
-                    <h3 class="text-xs font-semibold uppercase text-slate-500 mb-1">Description</h3>
-                    <p class="text-sm text-slate-700 whitespace-pre-line">{{ rule.description }}</p>
+                <div class="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700">
+                    <h3 class="text-xs font-semibold uppercase text-slate-500 dark:text-slate-400 mb-1">Description</h3>
+                    <p class="text-sm text-slate-700 dark:text-slate-200 whitespace-pre-line">{{ rule.description }}</p>
                 </div>
                 {% endif %}
             </div>
@@ -96,7 +96,7 @@
 
         <div class="card">
             <div class="card-header">
-                <h2 class="text-base font-semibold text-slate-800">Conditional Predicates ({{ conditions|length }})</h2>
+                <h2 class="text-base font-semibold text-slate-800 dark:text-slate-100">Conditional Predicates ({{ conditions|length }})</h2>
             </div>
             <div class="table-wrap">
                 <table class="table">
@@ -117,7 +117,7 @@
                             <td class="font-mono text-xs">{{ c.value }}</td>
                         </tr>
                         {% empty %}
-                        <tr><td colspan="4" class="text-center text-xs text-slate-500 py-4">No conditional predicates (matches all documents within scope).</td></tr>
+                        <tr><td colspan="4" class="text-center text-xs text-slate-500 dark:text-slate-400 py-4">No conditional predicates (matches all documents within scope).</td></tr>
                         {% endfor %}
                     </tbody>
                 </table>
@@ -126,25 +126,25 @@
 
         <div class="card">
             <div class="card-header">
-                <h2 class="text-base font-semibold text-slate-800">Validation Gates &amp; Auto-Populate Payloads</h2>
+                <h2 class="text-base font-semibold text-slate-800 dark:text-slate-100">Validation Gates &amp; Auto-Populate Payloads</h2>
             </div>
             <div class="card-body space-y-3 text-xs">
                 <div>
-                    <div class="font-semibold text-slate-700 mb-1">Validation Rules ({{ validation_rules|length }})</div>
+                    <div class="font-semibold text-slate-700 dark:text-slate-200 mb-1">Validation Rules ({{ validation_rules|length }})</div>
                     {% for v in validation_rules %}
-                    <div class="p-2 rounded border border-slate-200 bg-slate-50 mb-1 font-mono">{{ v }}</div>
+                    <div class="p-2 rounded border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 mb-1 font-mono">{{ v }}</div>
                     {% empty %}
-                    <p class="text-slate-500">No pre-transition validation gates configured.</p>
+                    <p class="text-slate-500 dark:text-slate-400">No pre-transition validation gates configured.</p>
                     {% endfor %}
                 </div>
                 <div>
-                    <div class="font-semibold text-slate-700 mb-1">Auto-Populate Configuration</div>
-                    <pre class="p-3 rounded border border-slate-200 bg-slate-50 overflow-x-auto">{{ auto_populate }}</pre>
+                    <div class="font-semibold text-slate-700 dark:text-slate-200 mb-1">Auto-Populate Configuration</div>
+                    <pre class="p-3 rounded border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 overflow-x-auto">{{ auto_populate }}</pre>
                 </div>
                 {% if rule.else_branch_enabled %}
                 <div>
-                    <div class="font-semibold text-slate-700 mb-1">Else Fallback Action</div>
-                    <pre class="p-3 rounded border border-slate-200 bg-slate-50 overflow-x-auto">{{ else_action }}</pre>
+                    <div class="font-semibold text-slate-700 dark:text-slate-200 mb-1">Else Fallback Action</div>
+                    <pre class="p-3 rounded border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 overflow-x-auto">{{ else_action }}</pre>
                 </div>
                 {% endif %}
             </div>
@@ -154,7 +154,7 @@
     <div class="space-y-6">
         <div class="card">
             <div class="card-header">
-                <h2 class="text-base font-semibold text-slate-800">Actions</h2>
+                <h2 class="text-base font-semibold text-slate-800 dark:text-slate-100">Actions</h2>
             </div>
             <div class="card-body space-y-2">
                 <a href="{% url 'documents:routing_rule_list' %}" class="btn btn-outline w-full justify-start">
