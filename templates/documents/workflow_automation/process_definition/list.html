@@ -137,25 +137,25 @@
                 {% for proc in process_definitions %}
                 <tr>
                     <td>
-                        <a href="{% url 'documents:process_definition_detail' proc.pk %}" class="font-semibold text-blue-600 hover:underline">
+                        <a href="{% url 'documents:process_definition_detail' proc.pk %}" class="font-semibold text-blue-600 dark:text-blue-400 hover:underline">
                             {{ proc.name }}
                         </a>
-                        <div class="text-xs text-slate-500 font-mono">{{ proc.number }} · {{ proc.code }} v{{ proc.version_number }}</div>
+                        <div class="text-xs text-slate-500 dark:text-slate-400 font-mono">{{ proc.number }} · {{ proc.code }} v{{ proc.version_number }}</div>
                     </td>
                     <td>
                         <span class="badge {{ proc.category_badge }}">{{ proc.get_process_category_display }}</span>
                     </td>
-                    <td class="text-sm text-slate-700">
+                    <td class="text-sm text-slate-700 dark:text-slate-200">
                         {{ proc.get_trigger_event_display }}
                         {% if proc.department %}
-                        <div class="text-xs text-slate-500">{{ proc.department.name }}</div>
+                        <div class="text-xs text-slate-500 dark:text-slate-400">{{ proc.department.name }}</div>
                         {% endif %}
                     </td>
-                    <td class="text-xs text-slate-600">
+                    <td class="text-xs text-slate-600 dark:text-slate-300">
                         {{ proc.swimlane_count }} lanes · {{ proc.node_count }} nodes · {{ proc.transition_count }} edges
                     </td>
-                    <td class="text-sm font-mono text-slate-700">{{ proc.sla_target_hours }}h</td>
-                    <td class="text-sm font-semibold text-slate-800">{{ proc.instance_count }}</td>
+                    <td class="text-sm font-mono text-slate-700 dark:text-slate-200">{{ proc.sla_target_hours }}h</td>
+                    <td class="text-sm font-semibold text-slate-800 dark:text-slate-100">{{ proc.instance_count }}</td>
                     <td>
                         <span class="badge {{ proc.status_badge }}">{{ proc.get_status_display }}</span>
                     </td>
@@ -187,9 +187,9 @@
                 <tr>
                     <td colspan="8">
                         <div class="empty-state">
-                            <i data-lucide="git-branch" class="w-10 h-10 text-slate-300 mx-auto mb-2"></i>
-                            <p class="font-medium text-slate-700">No process definitions found</p>
-                            <p class="text-xs text-slate-500 mb-3">Design reusable BPMN workflows with swimlanes and decision gateways.</p>
+                            <i data-lucide="git-branch" class="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto mb-2"></i>
+                            <p class="font-medium text-slate-700 dark:text-slate-200">No process definitions found</p>
+                            <p class="text-xs text-slate-500 dark:text-slate-400 mb-3">Design reusable BPMN workflows with swimlanes and decision gateways.</p>
                             <a href="{% url 'documents:process_definition_create' %}" class="btn btn-primary btn-sm">New Process Blueprint</a>
                         </div>
                     </td>
