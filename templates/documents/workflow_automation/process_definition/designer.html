@@ -177,16 +177,19 @@
             <div class="form-group">
                 <label class="form-label" for="{{ designer_form.swimlanes_json.id_for_label }}">Swimlanes JSON</label>
                 {{ designer_form.swimlanes_json }}
+                <div class="form-help">Array of {"id": "lane_id", "name": "Display Name", "color": "blue"} objects.</div>
                 {% if designer_form.swimlanes_json.errors %}<div class="form-error">{{ designer_form.swimlanes_json.errors }}</div>{% endif %}
             </div>
             <div class="form-group">
                 <label class="form-label" for="{{ designer_form.nodes_json.id_for_label }}">Nodes JSON *</label>
                 {{ designer_form.nodes_json }}
+                <div class="form-help">Requires at least one start_event and end_event node: {"id": "...", "type": "...", "label": "...", "lane_id": "..."}.</div>
                 {% if designer_form.nodes_json.errors %}<div class="form-error">{{ designer_form.nodes_json.errors }}</div>{% endif %}
             </div>
             <div class="form-group">
                 <label class="form-label" for="{{ designer_form.transitions_json.id_for_label }}">Transitions JSON</label>
                 {{ designer_form.transitions_json }}
+                <div class="form-help">Directed edges: {"id": "t1", "from_node": "...", "to_node": "...", "is_default": true, "condition": {...}}.</div>
                 {% if designer_form.transitions_json.errors %}<div class="form-error">{{ designer_form.transitions_json.errors }}</div>{% endif %}
             </div>
             <div class="flex justify-end">
