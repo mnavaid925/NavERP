@@ -5,7 +5,7 @@ from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Q, Sum
+from django.db.models import Count, Q, Sum
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_POST
 
@@ -29,8 +29,12 @@ from apps.documents.views._common import documents_object, documents_scope
 @login_required
 def webhook_trigger_list(request):
     qs = documents_scope(
-        DocumentWebhookTrigger.objects.select_related(
-            "process_definition", "connector_ref", "owner"
+        DocumentWebhookTrigger.objects.defer(
+            "custom_headers",
+            "payload_template_json",
+            "delivery_history_json",
+            "signing_secret",
+            "description",
         ),
         request,
     )
@@ -62,10 +66,12 @@ def webhook_trigger_list(request):
     elif status == "inactive":
         qs = qs.filter(is_active=False)
 
-    total_count = qs.count()
-    active_count = qs.filter(is_active=True).count()
-    simulated_count = qs.filter(last_status="simulated").count()
-    total_fires = qs.aggregate(total=Sum("fire_count"))["total"] or 0
+    stats = qs.aggregate(
+        total_count=Count("id"),
+        active_count=Count("id", filter=Q(is_active=True)),
+        simulated_count=Count("id", filter=Q(last_status="simulated")),
+        total_fires=Sum("fire_count"),
+    )
 
     paginator = Paginator(qs, 15)
     page_obj = paginator.get_page(request.GET.get("page"))
@@ -73,10 +79,10 @@ def webhook_trigger_list(request):
     context = {
         "webhooks": page_obj.object_list,
         "page_obj": page_obj,
-        "total_count": total_count,
-        "active_count": active_count,
-        "simulated_count": simulated_count,
-        "total_fires": total_fires,
+        "total_count": stats["total_count"] or 0,
+        "active_count": stats["active_count"] or 0,
+        "simulated_count": stats["simulated_count"] or 0,
+        "total_fires": stats["total_fires"] or 0,
         "direction_choices": DocumentWebhookTrigger.DIRECTION_CHOICES,
         "trigger_choices": DocumentWebhookTrigger.TRIGGER_EVENT_CHOICES,
         "last_status_choices": DocumentWebhookTrigger.LAST_STATUS_CHOICES,
@@ -104,13 +110,22 @@ def webhook_trigger_detail(request, pk):
         revealed_secret = reveal.get("secret")
 
     delivery_history = list(reversed(webhook.delivery_history_json or []))
-    tenant_documents = Document.objects.filter(tenant=request.tenant).order_by("-created_at")[:25]
+    all_docs = list(
+        Document.objects.filter(tenant=request.tenant)
+        .only("id", "number", "title", "current_version_label", "created_at", "tenant_id")
+        .order_by("-created_at", "title")
+    )
+    tenant_documents = all_docs[:25]
+    ping_form = WebhookTestPingForm(tenant=request.tenant)
+    ping_form.fields["document"].choices = [("", "Sample Payload (No Document)")] + [
+        (d.pk, str(d)) for d in all_docs
+    ]
 
     context = {
         "webhook": webhook,
         "revealed_secret": revealed_secret,
         "delivery_history": delivery_history,
-        "ping_form": WebhookTestPingForm(tenant=request.tenant),
+        "ping_form": ping_form,
         "tenant_documents": tenant_documents,
     }
     return render(request, "documents/workflow_automation/webhook_trigger/detail.html", context)
