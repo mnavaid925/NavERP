@@ -1,4 +1,5 @@
 import json
+import time
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -98,6 +99,14 @@ def webhook_trigger_list(request):
     return render(request, "documents/workflow_automation/webhook_trigger/list.html", context)
 
 
+def _store_revealed_secret(request, webhook_pk, raw_secret):
+    request.session["_dwhk_secret_reveal"] = {
+        "pk": webhook_pk,
+        "secret": raw_secret,
+        "created_ts": time.time(),
+    }
+
+
 @login_required
 def webhook_trigger_detail(request, pk):
     webhook = documents_object(
@@ -108,9 +117,19 @@ def webhook_trigger_detail(request, pk):
     )
     revealed_secret = None
     reveal = request.session.get("_dwhk_secret_reveal")
-    if isinstance(reveal, dict) and reveal.get("pk") == webhook.pk:
-        request.session.pop("_dwhk_secret_reveal", None)
-        revealed_secret = reveal.get("secret")
+    if reveal is not None:
+        if not isinstance(reveal, dict):
+            request.session.pop("_dwhk_secret_reveal", None)
+        else:
+            created_ts = reveal.get("created_ts")
+            is_expired = (
+                not isinstance(created_ts, (int, float))
+                or (time.time() - created_ts) > 120
+            )
+            if is_expired or reveal.get("pk") == webhook.pk:
+                request.session.pop("_dwhk_secret_reveal", None)
+                if not is_expired and reveal.get("pk") == webhook.pk:
+                    revealed_secret = reveal.get("secret")
 
     delivery_history = [
         {
@@ -158,7 +177,7 @@ def webhook_trigger_create(request):
                 raw_secret = webhook.generate_signing_secret()
                 webhook.save()
                 write_audit_log(request.user, webhook, "create", tenant=request.tenant)
-            request.session["_dwhk_secret_reveal"] = {"pk": webhook.pk, "secret": raw_secret}
+            _store_revealed_secret(request, webhook.pk, raw_secret)
             messages.success(
                 request,
                 f"Webhook trigger {webhook.number} created. Copy your signing secret below (shown once).",
@@ -230,7 +249,7 @@ def webhook_trigger_rotate_secret(request, pk):
         raw_secret = webhook.generate_signing_secret()
         webhook.save(update_fields=["signing_secret", "signing_secret_prefix", "updated_at"])
         write_audit_log(request.user, webhook, "rotate", tenant=request.tenant)
-    request.session["_dwhk_secret_reveal"] = {"pk": webhook.pk, "secret": raw_secret}
+    _store_revealed_secret(request, webhook.pk, raw_secret)
     messages.success(request, f"HMAC signing secret rotated for {webhook.number} (shown once below).")
     return redirect("documents:webhook_trigger_detail", pk=webhook.pk)
 
