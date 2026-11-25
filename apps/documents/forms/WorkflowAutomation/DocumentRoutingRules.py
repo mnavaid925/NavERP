@@ -59,7 +59,7 @@ class DocumentRoutingRuleForm(TenantUniqueMixin, TenantModelForm):
             "target_classification": forms.Select(attrs={"class": "form-select"}),
             "condition_logic_mode": forms.Select(attrs={"class": "form-select"}),
             "conditions_json": forms.Textarea(attrs={"class": "form-textarea font-mono text-xs", "rows": 4}),
-            "else_branch_enabled": forms.CheckboxInput(attrs={"class": "form-checkbox"}),
+            "else_branch_enabled": forms.CheckboxInput(attrs={"class": "form-check"}),
             "else_action_json": forms.Textarea(attrs={"class": "form-textarea font-mono text-xs", "rows": 3}),
             "validation_rules_json": forms.Textarea(attrs={"class": "form-textarea font-mono text-xs", "rows": 3}),
             "auto_populate_json": forms.Textarea(attrs={"class": "form-textarea font-mono text-xs", "rows": 3}),
@@ -68,7 +68,7 @@ class DocumentRoutingRuleForm(TenantUniqueMixin, TenantModelForm):
             "route_to_org_unit": forms.Select(attrs={"class": "form-select"}),
             "route_to_role": forms.Select(attrs={"class": "form-select"}),
             "route_to_user": forms.Select(attrs={"class": "form-select"}),
-            "is_active": forms.CheckboxInput(attrs={"class": "form-checkbox"}),
+            "is_active": forms.CheckboxInput(attrs={"class": "form-check"}),
         }
 
     def __init__(self, *args, **kwargs):
@@ -207,7 +207,7 @@ class RoutingRuleSimulatorForm(forms.Form):
     apply_mutations = forms.BooleanField(
         required=False,
         initial=False,
-        widget=forms.CheckboxInput(attrs={"class": "form-checkbox"}),
+        widget=forms.CheckboxInput(attrs={"class": "form-check"}),
     )
 
     def __init__(self, *args, tenant=None, **kwargs):
