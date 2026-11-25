@@ -26,13 +26,13 @@
 <div class="max-w-4xl mx-auto">
     <div class="card">
         <div class="card-header">
-            <h2 class="text-base font-semibold text-slate-800">Conditional Logic, Validation &amp; Distribution</h2>
+            <h2 class="text-base font-semibold text-slate-800 dark:text-slate-100">Conditional Logic, Validation &amp; Distribution</h2>
         </div>
         <div class="card-body">
             <form method="post" class="space-y-4">
                 {% csrf_token %}
                 {% if form.non_field_errors %}
-                <div class="p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">{{ form.non_field_errors }}</div>
+                <div class="p-3 bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-800 rounded text-red-700 dark:text-red-200 text-sm">{{ form.non_field_errors }}</div>
                 {% endif %}
 
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -133,11 +133,11 @@
                         {% if form.core_rule_ref.errors %}<div class="form-error">{{ form.core_rule_ref.errors }}</div>{% endif %}
                     </div>
                     <div class="form-group flex items-center gap-6 pt-6">
-                        <label class="flex items-center gap-2 text-sm text-slate-700">
+                        <label class="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
                             {{ form.is_active }}
                             <span>Active</span>
                         </label>
-                        <label class="flex items-center gap-2 text-sm text-slate-700">
+                        <label class="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
                             {{ form.else_branch_enabled }}
                             <span>Enable Else Fallback</span>
                         </label>
@@ -169,7 +169,7 @@
                     {% if form.else_action_json.errors %}<div class="form-error">{{ form.else_action_json.errors }}</div>{% endif %}
                 </div>
 
-                <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-700">
                     <a href="{% url 'documents:routing_rule_list' %}" class="btn btn-outline">Cancel</a>
                     <button type="submit" class="btn btn-primary">
                         <i data-lucide="check"></i>
