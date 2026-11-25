@@ -104,7 +104,7 @@ All 4 models inherit `apps.documents.models._base.TenantNumbered` (`tenant` FK `
   - `Index(fields=["tenant", "department"], name="doc_dbpm_tnt_dpt_idx")` (20)
 - **Properties & Helper Methods**:
   - `status_badge`, `category_badge`, `node_count`, `transition_count`, `swimlane_count`
-  - `validate_graph()` -> delegates to `validate_process_graph(self.swimlanes_json, self.nodes_json, self.transitions_json)` returning `(is_valid, errors, warnings)`.
+  - `validate_graph()` -> delegates to `validate_process_graph(self.swimlanes_json, self.nodes_json, self.transitions_json)` returning `{"is_valid": bool, "errors": list[str], "warnings": list[str], "node_count": int, "transition_count": int}`.
 
 ---
 
