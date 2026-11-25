@@ -141,7 +141,7 @@
     </div>
 
     <div class="space-y-6">
-        {% if instance.status != 'completed' and instance.status != 'cancelled' %}
+        {% if can_advance %}
         <div class="card">
             <div class="card-header">
                 <h2 class="text-base font-semibold text-slate-800 dark:text-slate-100">Advance Workflow Step</h2>
@@ -180,6 +180,8 @@
                     <i data-lucide="pencil"></i>
                     <span>Edit Instance</span>
                 </a>
+                {% endif %}
+                {% if can_cancel %}
                 <form method="post" action="{% url 'documents:process_instance_cancel' instance.pk %}" onsubmit="return confirm('Cancel process instance {{ instance.number }}?');">
                     {% csrf_token %}
                     <button type="submit" class="btn btn-outline w-full justify-start">
