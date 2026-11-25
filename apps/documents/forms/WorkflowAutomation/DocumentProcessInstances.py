@@ -1,11 +1,10 @@
-import json
-
 from django import forms
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 
 from apps.core.models import OrgUnit
 from apps.documents.forms._common import TenantModelForm, TenantUniqueMixin, reject_foreign
+from apps.documents.forms.WorkflowAutomation._common import parse_json_field_value
 from apps.documents.models.VersionControl.Documents import Document
 from apps.documents.models.VersionControl.DocumentVersions import DocumentVersion
 from apps.documents.models.WorkflowAutomation.DocumentProcessDefinitions import (
@@ -109,23 +108,9 @@ class DocumentProcessInstanceForm(TenantUniqueMixin, TenantModelForm):
             self.fields[opt].required = False
 
     def clean_context_variables_json(self):
-        val = self.cleaned_data.get("context_variables_json")
-        if val is None or val == "":
-            return {}
-        if isinstance(val, dict):
-            return val
-        if isinstance(val, str):
-            stripped = val.strip()
-            if not stripped:
-                return {}
-            try:
-                parsed = json.loads(stripped)
-            except json.JSONDecodeError as exc:
-                raise ValidationError(f"Invalid JSON for context variables: {exc}") from exc
-            if not isinstance(parsed, dict):
-                raise ValidationError("Context variables must be a JSON object.")
-            return parsed
-        raise ValidationError("Context variables must be a JSON object.")
+        return parse_json_field_value(
+            self.cleaned_data.get("context_variables_json"), dict, "context variables"
+        )
 
     def clean(self):
         cleaned = super().clean()
