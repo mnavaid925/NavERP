@@ -309,6 +309,130 @@ def _as_eval_str(val):
     return str(val)
 
 
+_REDOS_NESTED_QUANTIFIER_RE = re.compile(
+    r"\((?:[^()\\]|\\.)*(?<![\[\\])[+*](?:[^()\\]|\\.)*\)\s*(?:[+*?]|\{\d+,)"
+    r"|\((?:[^()\\]|\\.)*\{\d+,?\d*\}(?:[^()\\]|\\.)*\)\s*(?:[+*?]|\{\d+,)"
+)
+
+SUPPORTED_VALIDATION_CHECKS = frozenset({"required_metadata", "min_ocr_confidence", "not_status"})
+
+SUPPORTED_ELSE_ROUTE_ACTIONS = frozenset(
+    {
+        "move_to_folder",
+        "assign_role",
+        "assign_user",
+        "assign_org_unit_head",
+        "spawn_approval_workflow",
+        "create_document_task",
+        "populate_metadata",
+        "trigger_process",
+        "else_fallback",
+    }
+)
+
+
+def validate_safe_regex(pattern, max_len=200):
+    """Validate regex length, reject nested quantifiers (ReDoS), and compile."""
+    text = _as_eval_str(pattern)
+    if len(text) > max_len:
+        raise ValidationError(f"Regex pattern exceeds {max_len} characters.")
+    if _REDOS_NESTED_QUANTIFIER_RE.search(text):
+        raise ValidationError(
+            "Regex pattern cannot contain nested quantifiers (exponential backtracking risk)."
+        )
+    try:
+        re.compile(text)
+    except re.error as exc:
+        raise ValidationError(f"Invalid regular expression: {exc}") from exc
+    return text
+
+
+def validate_rule_conditions(clauses):
+    """Validate structured condition predicates including operators and ReDoS-safe regexes."""
+    if clauses is None or clauses == "":
+        return []
+    if not isinstance(clauses, list):
+        raise ValidationError("Conditions must be a JSON array.")
+    for idx, clause in enumerate(clauses):
+        if not isinstance(clause, dict):
+            raise ValidationError(f"Condition #{idx + 1} must be a JSON object.")
+        op = str(clause.get("op") or "eq").strip().lower()
+        if op not in SUPPORTED_RULE_OPERATORS:
+            raise ValidationError(f"Condition #{idx + 1} uses unsupported operator '{op}'.")
+        if op == "regex_match":
+            try:
+                validate_safe_regex(clause.get("value"))
+            except ValidationError as exc:
+                raise ValidationError(f"Condition #{idx + 1}: {exc.messages[0]}") from exc
+    return clauses
+
+
+def validate_validation_rules(rules_list):
+    """Validate pre-routing validation gate definitions."""
+    if rules_list is None or rules_list == "":
+        return []
+    if not isinstance(rules_list, list):
+        raise ValidationError("Validation rules must be a JSON array.")
+    for idx, vrule in enumerate(rules_list):
+        if not isinstance(vrule, dict):
+            raise ValidationError(f"Validation rule #{idx + 1} must be a JSON object.")
+        check_kind = str(vrule.get("check") or "required_metadata").strip()
+        if check_kind not in SUPPORTED_VALIDATION_CHECKS:
+            raise ValidationError(
+                f"Validation rule #{idx + 1} uses unsupported check '{check_kind}'."
+            )
+        vfield = str(vrule.get("field") or "").strip()
+        if check_kind in ("required_metadata", "not_status") and not vfield:
+            raise ValidationError(
+                f"Validation rule #{idx + 1} ({check_kind}) requires a non-empty 'field'."
+            )
+        if check_kind == "min_ocr_confidence":
+            raw_min = vrule.get("min_confidence", 0.7)
+            if _to_finite_decimal(raw_min) is None:
+                raise ValidationError(
+                    f"Validation rule #{idx + 1} has invalid min_confidence threshold '{raw_min}'."
+                )
+    return rules_list
+
+
+def validate_routing_rule_config(
+    conditions,
+    validation_rules,
+    route_action=None,
+    else_branch_enabled=False,
+    else_action=None,
+):
+    """Validate full DocumentRoutingRule JSON configuration at model or form layer."""
+    errors = {}
+    try:
+        validate_rule_conditions(conditions)
+    except ValidationError as exc:
+        errors["conditions_json"] = exc.messages
+    try:
+        parsed_vrules = validate_validation_rules(validation_rules)
+    except ValidationError as exc:
+        errors["validation_rules_json"] = exc.messages
+        parsed_vrules = None
+
+    if route_action == "block_validation" and parsed_vrules is not None and len(parsed_vrules) == 0:
+        errors["validation_rules_json"] = [
+            "Validation gate rules ('block_validation') require at least one validation check."
+        ]
+
+    if else_action is not None and else_action != "":
+        if not isinstance(else_action, dict):
+            errors["else_action_json"] = ["Else action configuration must be a JSON object."]
+        elif else_branch_enabled and else_action.get("route_action"):
+            else_ra = str(else_action.get("route_action")).strip()
+            if else_ra not in SUPPORTED_ELSE_ROUTE_ACTIONS:
+                errors["else_action_json"] = [
+                    f"Unsupported else fallback route_action '{else_ra}'."
+                ]
+
+    if errors:
+        raise ValidationError(errors)
+
+
 def evaluate_condition_clause(clause, doc_ctx):
     """Evaluate a single structured rule clause against normalized document context."""
     if not isinstance(clause, dict):
@@ -362,7 +486,7 @@ def evaluate_condition_clause(clause, doc_ctx):
         matched = _as_eval_str(expected).strip().lower() in _as_eval_str(actual).strip().lower()
     elif op == "regex_match":
         pattern = _as_eval_str(expected)
-        if len(pattern) <= 200:
+        if len(pattern) <= 200 and not _REDOS_NESTED_QUANTIFIER_RE.search(pattern):
             try:
                 matched = bool(re.search(pattern, _as_eval_str(actual)[:1000], re.IGNORECASE))
             except re.error:
@@ -711,6 +835,126 @@ def _assert_same_tenant(tenant, obj, label):
         raise ValidationError(f"{label} does not belong to workspace '{tenant}'.")
 
 
+def _resolve_else_fk(tenant, model_cls, raw_id, fallback_obj, label, require_active=False):
+    if raw_id in (None, ""):
+        return fallback_obj
+    if not str(raw_id).isdigit():
+        raise ValidationError(f"Invalid {label} identifier in else_action_json.")
+    obj = model_cls.objects.filter(pk=int(raw_id)).first()
+    if obj is None:
+        raise ValidationError(f"{label} '{raw_id}' was not found.")
+    _assert_same_tenant(tenant, obj, label)
+    if require_active and not getattr(obj, "is_active", True):
+        raise ValidationError(f"{label} '{raw_id}' is inactive.")
+    return obj
+
+
+def _execute_route_action(
+    tenant,
+    document,
+    rule,
+    action_name,
+    User,
+    destination_folder=None,
+    route_to_org_unit=None,
+    route_to_role=None,
+    route_to_user=None,
+    process_definition=None,
+    actor=None,
+    request=None,
+):
+    """Execute one supported DocumentRoutingRule action with tenant verification."""
+    from apps.documents.models.CollaborationSharing.DocumentTasks import DocumentTask
+    from apps.documents.services.audit import log_document_event
+
+    _assert_same_tenant(tenant, destination_folder, "Destination folder")
+    _assert_same_tenant(tenant, route_to_org_unit, "Route org unit")
+    _assert_same_tenant(tenant, route_to_role, "Route role")
+    _assert_same_tenant(tenant, route_to_user, "Route user")
+    _assert_same_tenant(tenant, process_definition, "Target process definition")
+
+    applied = []
+    if action_name == "move_to_folder" and destination_folder is not None:
+        _apply_folder_routing(tenant, document, destination_folder, actor=actor)
+        applied.append(f"filed->{destination_folder.path}")
+        log_document_event(
+            tenant=tenant,
+            action_type="moved",
+            document=document,
+            actor=actor,
+            request=request,
+            details={"bpm_event": "routing.moved_to_folder", "rule": rule.number, "folder": destination_folder.path},
+        )
+    elif action_name == "assign_user" and route_to_user is not None:
+        document.owner = route_to_user
+        document.save(update_fields=["owner", "updated_at"])
+        applied.append(f"owner->{route_to_user.username}")
+    elif action_name == "assign_org_unit_head" and route_to_org_unit is not None:
+        document.department = route_to_org_unit
+        mgr_user = _resolve_org_unit_manager_user(tenant, route_to_org_unit)
+        if mgr_user:
+            document.owner = mgr_user
+            document.save(update_fields=["department", "owner", "updated_at"])
+            applied.append(f"org_head->{mgr_user.username}")
+        else:
+            document.save(update_fields=["department", "updated_at"])
+            applied.append(f"department->{route_to_org_unit.name}")
+    elif action_name == "assign_role" and route_to_role is not None:
+        assignee = User.objects.filter(
+            tenant=tenant, role_id=route_to_role.id, is_active=True
+        ).order_by("pk").first()
+        DocumentTask.objects.create(
+            tenant=tenant,
+            document=document,
+            title=f"Rule {rule.number}: {rule.name}"[:255],
+            description=f"Auto-assigned to role '{route_to_role.name}'.",
+            task_type="review",
+            priority="medium",
+            assigned_to=assignee,
+            assigned_by=actor or document.owner,
+        )
+        applied.append(f"role_task->{route_to_role.name}")
+    elif action_name == "create_document_task":
+        DocumentTask.objects.create(
+            tenant=tenant,
+            document=document,
+            title=f"Routing Task: {rule.name}"[:255],
+            description=rule.description or f"Dispatched by routing rule {rule.number}.",
+            task_type="general_todo",
+            priority="medium",
+            assigned_to=route_to_user,
+            assigned_org_unit=route_to_org_unit,
+            assigned_by=actor or document.owner,
+        )
+        applied.append("task_created")
+    elif action_name == "spawn_approval_workflow":
+        wf = _spawn_approval_workflow_for_instance(
+            tenant=tenant,
+            document=document,
+            title=f"{rule.name} — {document.title}",
+            target_turnaround_hours=48,
+            initiator=actor or document.owner,
+            department=route_to_org_unit or document.department,
+        )
+        applied.append(f"spawned_dwf->{wf.number}")
+    elif action_name == "trigger_process" and process_definition is not None:
+        if process_definition.status == "published" and process_definition.is_active:
+            inst = start_process_instance(
+                tenant=tenant,
+                process_definition=process_definition,
+                document=document,
+                actor=actor,
+                department=route_to_org_unit or document.department,
+                assignee=route_to_user,
+                triggered_by_rule=rule,
+                request=request,
+            )
+            applied.append(f"started_dpin->{inst.number}")
+        else:
+            applied.append(f"skipped_dpin({process_definition.number}:not_published)")
+    return applied
+
+
 def evaluate_routing_rules(
     tenant,
     document,
@@ -721,8 +965,10 @@ def evaluate_routing_rules(
     request=None,
 ):
     """Evaluate active routing/business rules against a document (dry-run or live apply)."""
-    from apps.documents.models.ApprovalWorkflow.DocumentApprovalWorkflows import DocumentApprovalWorkflow
-    from apps.documents.models.CollaborationSharing.DocumentTasks import DocumentTask
+    from apps.accounts.models import Role
+    from apps.core.models import OrgUnit
+    from apps.documents.models.StorageRepository.DocumentFolders import DocumentFolder
+    from apps.documents.models.WorkflowAutomation.DocumentProcessDefinitions import DocumentProcessDefinition
     from apps.documents.models.WorkflowAutomation.DocumentRoutingRules import DocumentRoutingRule
     from apps.documents.services.audit import log_document_event
 
@@ -791,24 +1037,48 @@ def evaluate_routing_rules(
 
         validation_errors = []
         if scope_ok and cond_matched:
-            for vrule in rule.validation_rules_json or []:
-                if not isinstance(vrule, dict):
-                    continue
-                check_kind = vrule.get("check", "required_metadata")
-                vfield = str(vrule.get("field") or "").strip()
-                msg = vrule.get("message") or f"Validation check '{check_kind}' failed."
-                if check_kind == "required_metadata" and vfield:
-                    val = doc_ctx["metadata"].get(vfield)
-                    if val is None or _as_eval_str(val).strip() == "":
-                        validation_errors.append(msg)
-                elif check_kind == "min_ocr_confidence":
-                    min_conf = _to_finite_decimal(vrule.get("min_confidence", 0.7))
-                    actual_conf = _to_finite_decimal(doc_ctx["ocr"].get("confidence_score"))
-                    if min_conf is not None and (actual_conf is None or actual_conf < min_conf):
-                        validation_errors.append(msg)
-                elif check_kind == "not_status" and vfield:
-                    if document.status == vfield:
-                        validation_errors.append(msg)
+            vrules = rule.validation_rules_json or []
+            if not isinstance(vrules, list):
+                validation_errors.append(f"Invalid validation_rules_json structure on rule {rule.number}.")
+            else:
+                for vrule in vrules:
+                    if not isinstance(vrule, dict):
+                        validation_errors.append(f"Invalid validation rule entry on rule {rule.number}.")
+                        continue
+                    check_kind = str(vrule.get("check") or "required_metadata").strip()
+                    vfield = str(vrule.get("field") or "").strip()
+                    msg = vrule.get("message") or f"Validation check '{check_kind}' failed."
+                    if check_kind == "required_metadata":
+                        if not vfield:
+                            validation_errors.append(msg or "required_metadata check missing target field.")
+                        else:
+                            val = doc_ctx["metadata"].get(vfield)
+                            if val is None or _as_eval_str(val).strip() == "":
+                                validation_errors.append(msg)
+                    elif check_kind == "min_ocr_confidence":
+                        raw_min = vrule.get("min_confidence", 0.7)
+                        min_conf = _to_finite_decimal(raw_min)
+                        actual_conf = _to_finite_decimal(doc_ctx["ocr"].get("confidence_score"))
+                        if min_conf is None:
+                            validation_errors.append(
+                                vrule.get("message")
+                                or f"Invalid min_ocr_confidence threshold '{raw_min}' on rule {rule.number}."
+                            )
+                        elif actual_conf is None or actual_conf < min_conf:
+                            validation_errors.append(msg)
+                    elif check_kind == "not_status":
+                        if not vfield:
+                            validation_errors.append(msg or "not_status check missing status value.")
+                        elif document.status == vfield:
+                            validation_errors.append(msg)
+                    else:
+                        validation_errors.append(
+                            vrule.get("message") or f"Unsupported validation check '{check_kind}'."
+                        )
+            if rule.route_action == "block_validation" and not vrules:
+                validation_errors.append(
+                    f"Validation gate rule {rule.number} has no checks configured in validation_rules_json."
+                )
 
         used_else = False
         effective_action = None
@@ -831,90 +1101,22 @@ def evaluate_routing_rules(
                 if scope_ok and cond_matched and not validation_errors:
                     pop_changes = _apply_auto_populate(tenant, document, rule.auto_populate_json, actor=actor)
                     applied_actions.extend(pop_changes)
-
-                    if rule.route_action == "move_to_folder" and rule.destination_folder_id:
-                        _apply_folder_routing(tenant, document, rule.destination_folder, actor=actor)
-                        applied_actions.append(f"filed->{rule.destination_folder.path}")
-                        log_document_event(
+                    applied_actions.extend(
+                        _execute_route_action(
                             tenant=tenant,
-                            action_type="moved",
                             document=document,
+                            rule=rule,
+                            action_name=rule.route_action,
+                            User=User,
+                            destination_folder=rule.destination_folder,
+                            route_to_org_unit=rule.route_to_org_unit,
+                            route_to_role=rule.route_to_role,
+                            route_to_user=rule.route_to_user,
+                            process_definition=rule.process_definition,
                             actor=actor,
                             request=request,
-                            details={"bpm_event": "routing.moved_to_folder", "rule": rule.number, "folder": rule.destination_folder.path},
                         )
-                    elif rule.route_action == "assign_user" and rule.route_to_user_id:
-                        document.owner = rule.route_to_user
-                        document.save(update_fields=["owner", "updated_at"])
-                        applied_actions.append(f"owner->{rule.route_to_user.username}")
-                    elif rule.route_action == "assign_org_unit_head" and rule.route_to_org_unit_id:
-                        document.department = rule.route_to_org_unit
-                        mgr_user = _resolve_org_unit_manager_user(tenant, rule.route_to_org_unit)
-                        if mgr_user:
-                            document.owner = mgr_user
-                            document.save(update_fields=["department", "owner", "updated_at"])
-                            applied_actions.append(f"org_head->{mgr_user.username}")
-                        else:
-                            document.save(update_fields=["department", "updated_at"])
-                            applied_actions.append(f"department->{rule.route_to_org_unit.name}")
-                    elif rule.route_action == "assign_role" and rule.route_to_role_id:
-                        assignee = User.objects.filter(
-                            tenant=tenant, role_id=rule.route_to_role_id, is_active=True
-                        ).order_by("pk").first()
-                        DocumentTask.objects.create(
-                            tenant=tenant,
-                            document=document,
-                            title=f"Rule {rule.number}: {rule.name}"[:255],
-                            description=f"Auto-assigned to role '{rule.route_to_role.name}'.",
-                            task_type="review",
-                            priority="medium",
-                            assigned_to=assignee,
-                            assigned_by=actor or document.owner,
-                        )
-                        applied_actions.append(f"role_task->{rule.route_to_role.name}")
-                    elif rule.route_action == "create_document_task":
-                        DocumentTask.objects.create(
-                            tenant=tenant,
-                            document=document,
-                            title=f"Routing Task: {rule.name}"[:255],
-                            description=rule.description or f"Dispatched by routing rule {rule.number}.",
-                            task_type="general_todo",
-                            priority="medium",
-                            assigned_to=rule.route_to_user,
-                            assigned_org_unit=rule.route_to_org_unit,
-                            assigned_by=actor or document.owner,
-                        )
-                        applied_actions.append("task_created")
-                    elif rule.route_action == "spawn_approval_workflow":
-                        wf = _spawn_approval_workflow_for_instance(
-                            tenant=tenant,
-                            document=document,
-                            title=f"{rule.name} — {document.title}",
-                            target_turnaround_hours=48,
-                            initiator=actor or document.owner,
-                            department=rule.route_to_org_unit or document.department,
-                        )
-                        applied_actions.append(f"spawned_dwf->{wf.number}")
-                    elif rule.route_action == "trigger_process" and rule.process_definition_id:
-                        if (
-                            rule.process_definition.status == "published"
-                            and rule.process_definition.is_active
-                        ):
-                            inst = start_process_instance(
-                                tenant=tenant,
-                                process_definition=rule.process_definition,
-                                document=document,
-                                actor=actor,
-                                department=rule.route_to_org_unit or document.department,
-                                assignee=rule.route_to_user,
-                                triggered_by_rule=rule,
-                                request=request,
-                            )
-                            applied_actions.append(f"started_dpin->{inst.number}")
-                        else:
-                            applied_actions.append(
-                                f"skipped_dpin({rule.process_definition.number}:not_published)"
-                            )
+                    )
 
                     if pop_changes or applied_actions:
                         log_document_event(
@@ -958,10 +1160,83 @@ def evaluate_routing_rules(
                     )
                 elif used_else:
                     else_cfg = rule.else_action_json or {}
-                    else_meta = else_cfg.get("metadata_fields") or {}
-                    if else_meta:
-                        pop_changes = _apply_auto_populate(tenant, document, {"metadata_fields": else_meta}, actor=actor)
+                    pop_changes = []
+                    if isinstance(else_cfg, dict) and (
+                        else_cfg.get("metadata_fields") or else_cfg.get("document_fields")
+                    ):
+                        pop_changes = _apply_auto_populate(tenant, document, else_cfg, actor=actor)
                         applied_actions.extend(pop_changes)
+
+                    else_ra = str(else_cfg.get("route_action") or "").strip() if isinstance(else_cfg, dict) else ""
+                    if else_ra and else_ra != "else_fallback":
+                        if else_ra not in SUPPORTED_ELSE_ROUTE_ACTIONS:
+                            raise ValidationError(f"Unsupported else route_action '{else_ra}' on rule {rule.number}.")
+                        else_folder = _resolve_else_fk(
+                            tenant,
+                            DocumentFolder,
+                            else_cfg.get("destination_folder_id"),
+                            rule.destination_folder,
+                            "Else destination folder",
+                        )
+                        else_org = _resolve_else_fk(
+                            tenant,
+                            OrgUnit,
+                            else_cfg.get("route_to_org_unit_id"),
+                            rule.route_to_org_unit,
+                            "Else org unit",
+                        )
+                        else_role = _resolve_else_fk(
+                            tenant,
+                            Role,
+                            else_cfg.get("route_to_role_id"),
+                            rule.route_to_role,
+                            "Else role",
+                        )
+                        else_user = _resolve_else_fk(
+                            tenant,
+                            User,
+                            else_cfg.get("route_to_user_id"),
+                            rule.route_to_user,
+                            "Else user",
+                            require_active=True,
+                        )
+                        else_proc = _resolve_else_fk(
+                            tenant,
+                            DocumentProcessDefinition,
+                            else_cfg.get("process_definition_id"),
+                            rule.process_definition,
+                            "Else process definition",
+                        )
+                        applied_actions.extend(
+                            _execute_route_action(
+                                tenant=tenant,
+                                document=document,
+                                rule=rule,
+                                action_name=else_ra,
+                                User=User,
+                                destination_folder=else_folder,
+                                route_to_org_unit=else_org,
+                                route_to_role=else_role,
+                                route_to_user=else_user,
+                                process_definition=else_proc,
+                                actor=actor,
+                                request=request,
+                            )
+                        )
+                    if pop_changes or applied_actions:
+                        log_document_event(
+                            tenant=tenant,
+                            action_type="edited",
+                            document=document,
+                            actor=actor,
+                            request=request,
+                            details={
+                                "bpm_event": "routing.else_fallback",
+                                "rule": rule.number,
+                                "action": else_ra or "else_fallback",
+                                "changes": applied_actions,
+                            },
+                        )
 
         results.append(
             {
