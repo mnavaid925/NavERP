@@ -6,6 +6,7 @@ from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Q
+from django.db.models.deletion import ProtectedError
 from django.shortcuts import redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
@@ -236,9 +237,16 @@ def process_definition_delete(request, pk):
         return redirect("documents:process_definition_detail", pk=process_def.pk)
 
     number = process_def.number
-    with transaction.atomic():
-        write_audit_log(request.user, process_def, "delete", tenant=request.tenant)
-        process_def.delete()
+    try:
+        with transaction.atomic():
+            write_audit_log(request.user, process_def, "delete", tenant=request.tenant)
+            process_def.delete()
+    except ProtectedError:
+        messages.error(
+            request,
+            "Cannot delete a process definition referenced by existing process instances, routing rules, or webhooks.",
+        )
+        return redirect("documents:process_definition_detail", pk=process_def.pk)
     messages.success(request, f"Process definition {number} deleted.")
     return redirect("documents:process_definition_list")
 
