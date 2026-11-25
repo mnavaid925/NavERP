@@ -114,9 +114,10 @@
                     {% if form.payload_template_json.errors %}<div class="form-error">{{ form.payload_template_json.errors }}</div>{% endif %}
                 </div>
 
-                <div class="form-group flex items-center gap-2">
+                <div class="form-group flex-row items-center gap-2">
                     {{ form.is_active }}
                     <label class="form-label mb-0" for="{{ form.is_active.id_for_label }}">Active Subscription</label>
+                    {% if form.is_active.errors %}<div class="form-error">{{ form.is_active.errors }}</div>{% endif %}
                 </div>
 
                 <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-700">
