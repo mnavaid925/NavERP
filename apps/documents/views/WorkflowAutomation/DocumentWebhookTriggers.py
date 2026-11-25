@@ -209,14 +209,15 @@ def webhook_trigger_rotate_secret(request, pk):
 @login_required
 @require_POST
 def webhook_trigger_test_ping(request, pk):
-    webhook = documents_object(request, DocumentWebhookTrigger, pk)
+    webhook = documents_object(request, DocumentWebhookTrigger, pk, select_related=("tenant",))
     form = WebhookTestPingForm(request.POST, tenant=request.tenant)
-    event_name = webhook.trigger_event
-    doc = None
-    if form.is_valid():
-        if form.cleaned_data.get("event_override"):
-            event_name = form.cleaned_data["event_override"]
-        doc = form.cleaned_data.get("document")
+    if not form.is_valid():
+        first_err = next(iter(form.errors.values()), ["Invalid test ping parameters."])[0]
+        messages.error(request, f"Test ping rejected: {first_err}")
+        return redirect("documents:webhook_trigger_detail", pk=webhook.pk)
+
+    event_name = form.cleaned_data.get("event_override") or webhook.trigger_event
+    doc = form.cleaned_data.get("document")
 
     payload_data = {
         "test_ping": True,
@@ -244,12 +245,25 @@ def webhook_trigger_test_ping(request, pk):
 @require_POST
 def webhook_trigger_simulate_inbound(request, pk):
     webhook = documents_object(
-        request, DocumentWebhookTrigger, pk, select_related=("process_definition",)
+        request, DocumentWebhookTrigger, pk, select_related=("tenant", "process_definition")
     )
+    if not webhook.is_active:
+        messages.warning(
+            request,
+            f"Webhook trigger {webhook.number} is paused. Activate it before simulating inbound events.",
+        )
+        return redirect("documents:webhook_trigger_detail", pk=webhook.pk)
+
     doc_id = request.POST.get("document_id", "").strip()
     doc = None
-    if doc_id and doc_id.isdigit():
+    if doc_id:
+        if not doc_id.isdigit():
+            messages.error(request, "Invalid target document identifier.")
+            return redirect("documents:webhook_trigger_detail", pk=webhook.pk)
         doc = Document.objects.filter(tenant=request.tenant, pk=int(doc_id)).first()
+        if doc is None:
+            messages.error(request, "Selected target document was not found in this workspace.")
+            return redirect("documents:webhook_trigger_detail", pk=webhook.pk)
 
     if webhook.process_definition_id and doc is not None:
         try:
