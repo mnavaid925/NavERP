@@ -90,7 +90,7 @@
                     <div class="flex items-center justify-between flex-wrap gap-2">
                         <div>
                             <a href="{% url 'documents:routing_rule_detail' res.rule.pk %}" class="font-semibold text-blue-600 dark:text-blue-400 hover:underline">{{ res.rule.number }} — {{ res.rule.name }}</a>
-                            <span class="text-xs text-slate-500 dark:text-slate-400 font-mono ml-2">P{{ res.rule.priority }}</span>
+                            <span class="text-xs text-slate-500 dark:text-slate-400 font-mono ms-2">P{{ res.rule.priority }}</span>
                         </div>
                         <div class="flex items-center gap-2">
                             {% if res.matched and not res.validation_errors %}
