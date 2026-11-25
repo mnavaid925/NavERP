@@ -65,6 +65,12 @@ class DocumentProcessInstanceForm(TenantUniqueMixin, TenantModelForm):
             self.fields["current_assignee"].queryset = User.objects.filter(
                 tenant=self.tenant, is_active=True
             ).order_by("username")
+        else:
+            self.fields["process_definition"].queryset = DocumentProcessDefinition.objects.none()
+            self.fields["document"].queryset = Document.objects.none()
+            self.fields["version"].queryset = DocumentVersion.objects.none()
+            self.fields["department"].queryset = OrgUnit.objects.none()
+            self.fields["current_assignee"].queryset = User.objects.none()
 
         for opt in ("version", "department", "current_assignee", "context_variables_json"):
             self.fields[opt].required = False
