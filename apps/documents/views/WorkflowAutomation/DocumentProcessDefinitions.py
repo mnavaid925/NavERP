@@ -5,7 +5,7 @@ from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.db.models.deletion import ProtectedError
 from django.shortcuts import redirect, render
 from django.utils import timezone
@@ -57,9 +57,7 @@ DEFAULT_TRANSITIONS = [
 @login_required
 def process_definition_list(request):
     qs = documents_scope(
-        DocumentProcessDefinition.objects.select_related(
-            "owner", "department", "target_folder", "core_workflow_ref"
-        ),
+        DocumentProcessDefinition.objects.select_related("department").defer("description"),
         request,
     )
 
@@ -88,23 +86,29 @@ def process_definition_list(request):
     if department_id and department_id.isdigit():
         qs = qs.filter(department_id=int(department_id))
 
-    total_count = qs.count()
-    published_count = qs.filter(status="published").count()
-    draft_count = qs.filter(status="draft").count()
-    active_count = qs.filter(is_active=True).count()
+    stats = qs.aggregate(
+        total_count=Count("id"),
+        published_count=Count("id", filter=Q(status="published")),
+        draft_count=Count("id", filter=Q(status="draft")),
+        active_count=Count("id", filter=Q(is_active=True)),
+    )
 
     paginator = Paginator(qs, 15)
     page_obj = paginator.get_page(request.GET.get("page"))
 
-    departments = OrgUnit.objects.filter(tenant=request.tenant).order_by("name")
+    departments = (
+        OrgUnit.objects.filter(tenant=request.tenant)
+        .only("id", "name", "tenant_id")
+        .order_by("name")
+    )
 
     context = {
         "process_definitions": page_obj.object_list,
         "page_obj": page_obj,
-        "total_count": total_count,
-        "published_count": published_count,
-        "draft_count": draft_count,
-        "active_count": active_count,
+        "total_count": stats["total_count"] or 0,
+        "published_count": stats["published_count"] or 0,
+        "draft_count": stats["draft_count"] or 0,
+        "active_count": stats["active_count"] or 0,
         "status_choices": DocumentProcessDefinition.STATUS_CHOICES,
         "category_choices": DocumentProcessDefinition.PROCESS_CATEGORY_CHOICES,
         "trigger_choices": DocumentProcessDefinition.TRIGGER_EVENT_CHOICES,
@@ -125,17 +129,37 @@ def process_definition_detail(request, pk):
         DocumentProcessDefinition,
         pk,
         select_related=("owner", "department", "target_folder", "core_workflow_ref"),
-        prefetch_related=("routing_rules", "webhook_triggers"),
     )
     validation_result = process_def.validate_graph()
     simulation_steps = simulate_process_path(process_def, context={"classification": "confidential"})
-    routing_rules = process_def.routing_rules.filter(tenant=request.tenant).order_by("priority", "name")
+    routing_rules = (
+        process_def.routing_rules.filter(tenant=request.tenant)
+        .defer(
+            "conditions_json",
+            "else_action_json",
+            "validation_rules_json",
+            "auto_populate_json",
+            "description",
+        )
+        .order_by("priority", "name")
+    )
     recent_instances = (
         process_def.instances.filter(tenant=request.tenant)
         .select_related("document", "initiated_by", "current_assignee")
+        .defer("step_trace_json", "context_variables_json", "error_message")
         .order_by("-started_at", "-id")[:10]
     )
-    webhooks = process_def.webhook_triggers.filter(tenant=request.tenant).order_by("name")
+    webhooks = (
+        process_def.webhook_triggers.filter(tenant=request.tenant)
+        .defer(
+            "custom_headers",
+            "payload_template_json",
+            "delivery_history_json",
+            "signing_secret",
+            "description",
+        )
+        .order_by("name")
+    )
 
     context = {
         "process_def": process_def,
