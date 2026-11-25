@@ -1,5 +1,4 @@
 import json
-import re
 
 from django import forms
 from django.contrib.auth import get_user_model
@@ -14,7 +13,11 @@ from apps.documents.models.WorkflowAutomation.DocumentProcessDefinitions import 
     DocumentProcessDefinition,
 )
 from apps.documents.models.WorkflowAutomation.DocumentRoutingRules import DocumentRoutingRule
-from apps.documents.services.workflow_automation import SUPPORTED_RULE_OPERATORS
+from apps.documents.services.workflow_automation import (
+    validate_routing_rule_config,
+    validate_rule_conditions,
+    validate_validation_rules,
+)
 
 
 def _parse_json_value(val, expected_type, label):
@@ -143,27 +146,14 @@ class DocumentRoutingRuleForm(TenantUniqueMixin, TenantModelForm):
 
     def clean_conditions_json(self):
         clauses = _parse_json_value(self.cleaned_data.get("conditions_json"), list, "conditions")
-        for idx, clause in enumerate(clauses):
-            if not isinstance(clause, dict):
-                raise ValidationError(f"Condition #{idx + 1} must be a JSON object.")
-            op = str(clause.get("op") or "eq").strip().lower()
-            if op not in SUPPORTED_RULE_OPERATORS:
-                raise ValidationError(f"Condition #{idx + 1} uses unsupported operator '{op}'.")
-            if op == "regex_match":
-                pattern = str(clause.get("value") or "")
-                if len(pattern) > 200:
-                    raise ValidationError(f"Regex pattern in condition #{idx + 1} exceeds 200 chars.")
-                try:
-                    re.compile(pattern)
-                except re.error as exc:
-                    raise ValidationError(f"Invalid regex in condition #{idx + 1}: {exc}") from exc
-        return clauses
+        return validate_rule_conditions(clauses)
 
     def clean_else_action_json(self):
         return _parse_json_value(self.cleaned_data.get("else_action_json"), dict, "else action")
 
     def clean_validation_rules_json(self):
-        return _parse_json_value(self.cleaned_data.get("validation_rules_json"), list, "validation rules")
+        rules = _parse_json_value(self.cleaned_data.get("validation_rules_json"), list, "validation rules")
+        return validate_validation_rules(rules)
 
     def clean_auto_populate_json(self):
         return _parse_json_value(self.cleaned_data.get("auto_populate_json"), dict, "auto-populate config")
@@ -183,6 +173,21 @@ class DocumentRoutingRuleForm(TenantUniqueMixin, TenantModelForm):
                 "route_to_user",
             ],
         )
+        try:
+            validate_routing_rule_config(
+                cleaned.get("conditions_json"),
+                cleaned.get("validation_rules_json"),
+                route_action=cleaned.get("route_action"),
+                else_branch_enabled=bool(cleaned.get("else_branch_enabled")),
+                else_action=cleaned.get("else_action_json"),
+            )
+        except ValidationError as exc:
+            for field, msgs in exc.message_dict.items():
+                if field in self.fields:
+                    for msg in msgs:
+                        self.add_error(field, msg)
+                else:
+                    raise
         return cleaned
 
 
