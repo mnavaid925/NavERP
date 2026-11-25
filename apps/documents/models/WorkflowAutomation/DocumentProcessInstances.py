@@ -117,6 +117,8 @@ class DocumentProcessInstance(TenantNumbered):
             models.Index(fields=["tenant", "document"], name="doc_dpin_tnt_doc_idx"),
             models.Index(fields=["tenant", "is_sla_breached"], name="doc_dpin_tnt_sla_idx"),
             models.Index(fields=["tenant", "-started_at"], name="doc_dpin_tnt_str_idx"),
+            models.Index(fields=["tenant", "department"], name="doc_dpin_tnt_dpt_idx"),
+            models.Index(fields=["tenant", "status", "-started_at"], name="doc_dpin_tnt_sts_str_idx"),
         ]
 
     def __str__(self):
