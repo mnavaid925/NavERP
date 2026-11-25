@@ -174,7 +174,7 @@ class DocumentWebhookTrigger(TenantNumbered):
             raise ValidationError(
                 {"target_url": "Target URL is required for outbound webhooks and middleware callbacks."}
             )
-        validate_flat_headers(self.custom_headers)
+        self.custom_headers = validate_flat_headers(self.custom_headers)
 
     def set_signing_secret(self, raw_secret):
         if raw_secret:
@@ -187,10 +187,7 @@ class DocumentWebhookTrigger(TenantNumbered):
     def get_signing_secret(self):
         if not self.signing_secret:
             return ""
-        try:
-            return decrypt(self.signing_secret)
-        except Exception:
-            return ""
+        return decrypt(self.signing_secret)
 
     def generate_signing_secret(self):
         raw = secrets.token_hex(32)
