@@ -16,7 +16,7 @@
         <h1 class="page-title">{% if is_edit %}Edit Webhook Trigger: {{ webhook.number }}{% else %}Register DMS Webhook Trigger{% endif %}</h1>
     </div>
     <div class="page-actions">
-        <a href="{% url 'documents:webhook_trigger_list' %}" class="btn btn-outline">
+        <a href="{% if is_edit %}{% url 'documents:webhook_trigger_detail' webhook.pk %}{% else %}{% url 'documents:webhook_trigger_list' %}{% endif %}" class="btn btn-outline">
             <i data-lucide="arrow-left"></i>
             <span>Cancel</span>
         </a>
@@ -123,7 +123,7 @@
                 </div>
 
                 <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-700">
-                    <a href="{% url 'documents:webhook_trigger_list' %}" class="btn btn-outline">Cancel</a>
+                    <a href="{% if is_edit %}{% url 'documents:webhook_trigger_detail' webhook.pk %}{% else %}{% url 'documents:webhook_trigger_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
                     <button type="submit" class="btn btn-primary">
                         <i data-lucide="check"></i>
                         <span>{% if is_edit %}Save Changes{% else %}Create Webhook Trigger{% endif %}</span>
