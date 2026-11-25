@@ -5,7 +5,7 @@ from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import F, Q
+from django.db.models import Count, F, Q
 from django.shortcuts import redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
@@ -53,10 +53,15 @@ def process_instance_list(request):
         DocumentProcessInstance.objects.select_related(
             "process_definition",
             "document",
-            "department",
-            "initiated_by",
             "current_assignee",
-            "approval_workflow",
+        ).defer(
+            "step_trace_json",
+            "context_variables_json",
+            "error_message",
+            "process_definition__swimlanes_json",
+            "process_definition__nodes_json",
+            "process_definition__transitions_json",
+            "process_definition__description",
         ),
         request,
     )
@@ -89,25 +94,37 @@ def process_instance_list(request):
     elif sla_breached == "0":
         qs = qs.filter(is_sla_breached=False)
 
-    total_count = qs.count()
-    active_count = qs.filter(status__in=["queued", "running", "waiting_approval", "waiting_timer"]).count()
-    completed_count = qs.filter(status="completed").count()
-    sla_breached_count = qs.filter(is_sla_breached=True).count()
+    stats = qs.aggregate(
+        total_count=Count("id"),
+        active_count=Count(
+            "id",
+            filter=Q(status__in=["queued", "running", "waiting_approval", "waiting_timer"]),
+        ),
+        completed_count=Count("id", filter=Q(status="completed")),
+        sla_breached_count=Count("id", filter=Q(is_sla_breached=True)),
+    )
 
     paginator = Paginator(qs, 15)
     page_obj = paginator.get_page(request.GET.get("page"))
 
-    process_definitions = DocumentProcessDefinition.objects.filter(
-        tenant=request.tenant
-    ).order_by("code", "-version_number")
-    departments = OrgUnit.objects.filter(tenant=request.tenant).order_by("name")
+    process_definitions = (
+        DocumentProcessDefinition.objects.filter(tenant=request.tenant)
+        .only("id", "code", "version_number", "name", "tenant_id")
+        .order_by("code", "-version_number")
+    )
+    departments = (
+        OrgUnit.objects.filter(tenant=request.tenant)
+        .only("id", "name", "tenant_id")
+        .order_by("name")
+    )
 
     context = {
         "instances": page_obj.object_list,
         "page_obj": page_obj,
-        "total_count": total_count,
-        "active_count": active_count,
-        "completed_count": completed_count,
+        "total_count": stats["total_count"] or 0,
+        "active_count": stats["active_count"] or 0,
+        "completed_count": stats["completed_count"] or 0,
+        "sla_breached_count": stats["sla_breached_count"] or 0,
         "sla_breached_count": sla_breached_count,
         "status_choices": DocumentProcessInstance.STATUS_CHOICES,
         "process_definitions": process_definitions,
