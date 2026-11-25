@@ -101,7 +101,10 @@ class DocumentProcessDefinitionForm(TenantUniqueMixin, TenantModelForm):
     def clean(self):
         cleaned = super().clean()
         reject_foreign(self, cleaned, ["target_folder", "department", "core_workflow_ref"])
-        code = cleaned.get("code")
+        code = (cleaned.get("code") or "").strip().upper()
+        if code:
+            cleaned["code"] = code
+            self.instance.code = code
         version_number = cleaned.get("version_number")
         if self.tenant and code and version_number:
             qs = DocumentProcessDefinition.objects.filter(
