@@ -160,14 +160,14 @@
                         <span class="badge {{ proc.status_badge }}">{{ proc.get_status_display }}</span>
                     </td>
                     <td class="table-actions text-right">
-                        <a href="{% url 'documents:process_definition_detail' proc.pk %}" class="btn btn-icon btn-outline" title="View Blueprint" aria-label="View {{ proc.number }}">
+                        <a href="{% url 'documents:process_definition_detail' proc.pk %}" class="btn btn-icon" title="View Blueprint" aria-label="View {{ proc.number }}">
                             <i data-lucide="eye"></i>
                         </a>
-                        <a href="{% url 'documents:process_definition_designer' proc.pk %}" class="btn btn-icon btn-outline" title="Visual Designer" aria-label="Design {{ proc.number }}">
+                        <a href="{% url 'documents:process_definition_designer' proc.pk %}" class="btn btn-icon" title="Visual Designer" aria-label="Design {{ proc.number }}">
                             <i data-lucide="workflow"></i>
                         </a>
                         {% if proc.status != 'archived' %}
-                        <a href="{% url 'documents:process_definition_edit' proc.pk %}" class="btn btn-icon btn-outline" title="Edit Blueprint" aria-label="Edit {{ proc.number }}">
+                        <a href="{% url 'documents:process_definition_edit' proc.pk %}" class="btn btn-icon" title="Edit Blueprint" aria-label="Edit {{ proc.number }}">
                             <i data-lucide="pencil"></i>
                         </a>
                         {% endif %}
@@ -175,7 +175,7 @@
                         {% if user.is_superuser or user.is_tenant_admin %}
                         <form method="post" action="{% url 'documents:process_definition_delete' proc.pk %}" class="inline" onsubmit="return confirm('Delete process definition {{ proc.number }}?');">
                             {% csrf_token %}
-                            <button type="submit" class="btn btn-icon btn-danger" title="Delete Blueprint" aria-label="Delete {{ proc.number }}">
+                            <button type="submit" class="btn btn-icon danger" title="Delete Blueprint" aria-label="Delete {{ proc.number }}">
                                 <i data-lucide="trash-2"></i>
                             </button>
                         </form>
