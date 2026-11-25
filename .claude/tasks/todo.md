@@ -265,7 +265,7 @@
 
 #### Shared BPM & Automation Service Layer
 - [ ] `apps/documents/services/workflow_automation.py`:
-  - `validate_process_graph(swimlanes, nodes, transitions)` returning `(is_valid, errors, warnings)`.
+  - `validate_process_graph(swimlanes, nodes, transitions)` returning `{"is_valid", "errors", "warnings", "node_count", "transition_count"}`.
   - `simulate_process_path(process_definition, context=None)` returning deterministic dry-run step list & gateway choices.
   - `evaluate_routing_rules(tenant, document, rules=None, trigger_event=None, apply_mutations=False, actor=None, request=None)` evaluating `all_and`/`any_or` clauses (`eq`, `ne`, `gt`, `gte`, `lt`, `lte`, `in`, `not_in`, `contains`, `regex_match`, `is_set`, `is_empty`), validation gates, `else_branch_enabled` fallback, auto-population of `Document` / `DocumentMetadataValue`, `move_to_folder` (`tags` + optional `department` + `DocumentMetadataValue` `routed_folder_path`), `assign_org_unit_head` via `core.Employment`, `spawn_approval_workflow` (13.3 `DocumentApprovalWorkflow`), `create_document_task` (13.8 `DocumentTask`), and valid `DocumentAuditTrail` logging.
   - `start_process_instance(...)` & `advance_process_instance(...)` tracking node progression, `step_trace_json`, `rework_count`, `variant_signature`, `is_conformant`, `cycle_time_minutes`, `is_sla_breached`, and `DocumentAuditTrail` events.
