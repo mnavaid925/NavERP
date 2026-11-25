@@ -26,7 +26,7 @@
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
     <div class="card">
         <div class="card-header">
-            <h2 class="text-base font-semibold text-slate-800">Evaluation Parameters</h2>
+            <h2 class="text-base font-semibold text-slate-800 dark:text-slate-100">Evaluation Parameters</h2>
         </div>
         <div class="card-body">
             <form method="post" class="space-y-4">
@@ -52,7 +52,7 @@
                     <label class="form-label mb-0" for="{{ form.apply_mutations.id_for_label }}">Apply Live Mutations (Tags, Metadata, Workflows)</label>
                 </div>
                 {% else %}
-                <div class="text-xs text-slate-500">Dry-run mode only (live mutation requires tenant admin).</div>
+                <div class="text-xs text-slate-500 dark:text-slate-400">Dry-run mode only (live mutation requires tenant admin).</div>
                 {% endif %}
                 <button type="submit" class="btn btn-primary w-full">
                     <i data-lucide="play"></i>
@@ -64,8 +64,8 @@
 
     <div class="lg:col-span-2 space-y-6">
         {% if applied_summary %}
-        <div class="card border-green-200 bg-green-50">
-            <div class="card-body text-sm text-green-800 space-y-1">
+        <div class="card border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/50">
+            <div class="card-body text-sm text-green-800 dark:text-green-200 space-y-1">
                 <div class="font-semibold">Applied Document Mutations:</div>
                 {% for line in applied_summary %}
                 <div class="font-mono text-xs">• {{ line }}</div>
@@ -77,16 +77,16 @@
         {% if selected_document %}
         <div class="card">
             <div class="card-header flex items-center justify-between">
-                <h2 class="text-base font-semibold text-slate-800">Evaluation Trace: {{ selected_document.number }} — {{ selected_document.title }}</h2>
+                <h2 class="text-base font-semibold text-slate-800 dark:text-slate-100">Evaluation Trace: {{ selected_document.number }} — {{ selected_document.title }}</h2>
                 <span class="badge {{ selected_document.classification_badge_class }}">{{ selected_document.get_classification_display }}</span>
             </div>
             <div class="card-body space-y-4">
                 {% for res in evaluation_results %}
-                <div class="p-4 rounded-lg border border-slate-200 bg-slate-50 space-y-2">
+                <div class="p-4 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 space-y-2">
                     <div class="flex items-center justify-between flex-wrap gap-2">
                         <div>
-                            <a href="{% url 'documents:routing_rule_detail' res.rule.pk %}" class="font-semibold text-blue-600 hover:underline">{{ res.rule.number }} — {{ res.rule.name }}</a>
-                            <span class="text-xs text-slate-500 font-mono ml-2">P{{ res.rule.priority }}</span>
+                            <a href="{% url 'documents:routing_rule_detail' res.rule.pk %}" class="font-semibold text-blue-600 dark:text-blue-400 hover:underline">{{ res.rule.number }} — {{ res.rule.name }}</a>
+                            <span class="text-xs text-slate-500 dark:text-slate-400 font-mono ml-2">P{{ res.rule.priority }}</span>
                         </div>
                         <div class="flex items-center gap-2">
                             {% if res.matched and not res.validation_errors %}
@@ -102,13 +102,13 @@
                     </div>
 
                     {% if res.scope_reasons %}
-                    <div class="text-xs text-slate-500">Scope skipped: {{ res.scope_reasons|join:", " }}</div>
+                    <div class="text-xs text-slate-500 dark:text-slate-400">Scope skipped: {{ res.scope_reasons|join:", " }}</div>
                     {% endif %}
 
                     {% if res.clause_traces %}
                     <div class="space-y-1">
                         {% for trace in res.clause_traces %}
-                        <div class="text-xs font-mono flex items-center justify-between bg-white px-2 py-1 rounded border border-slate-100">
+                        <div class="text-xs font-mono flex items-center justify-between bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 px-2 py-1 rounded border border-slate-100 dark:border-slate-700">
                             <span>{{ trace.source }}.{{ trace.field }} {{ trace.op }} {{ trace.expected }} (actual: {{ trace.actual }})</span>
                             <span class="badge {% if trace.matched %}badge-green{% else %}badge-slate{% endif %}">{% if trace.matched %}TRUE{% else %}FALSE{% endif %}</span>
                         </div>
@@ -117,19 +117,19 @@
                     {% endif %}
 
                     {% if res.validation_errors %}
-                    <div class="text-xs text-red-700 bg-red-50 p-2 rounded border border-red-200">
+                    <div class="text-xs text-red-700 dark:text-red-200 bg-red-50 dark:bg-red-950/50 p-2 rounded border border-red-200 dark:border-red-800">
                         {{ res.validation_errors|join:"; " }}
                     </div>
                     {% endif %}
 
                     {% if res.effective_action %}
-                    <div class="text-xs text-slate-700">
+                    <div class="text-xs text-slate-700 dark:text-slate-200">
                         Effective action: <span class="font-mono font-semibold">{{ res.effective_action }}</span>
                     </div>
                     {% endif %}
                 </div>
                 {% empty %}
-                <p class="text-sm text-slate-500">No active rules matched the selected trigger scope.</p>
+                <p class="text-sm text-slate-500 dark:text-slate-400">No active rules matched the selected trigger scope.</p>
                 {% endfor %}
             </div>
         </div>
@@ -137,9 +137,9 @@
         <div class="card">
             <div class="card-body">
                 <div class="empty-state">
-                    <i data-lucide="flask-conical" class="w-10 h-10 text-slate-300 mx-auto mb-2"></i>
-                    <p class="font-medium text-slate-700">Select a Document to Simulate Rules</p>
-                    <p class="text-xs text-slate-500">Inspect clause-by-clause boolean evaluation, OCR/metadata checks, and proposed auto-filing paths.</p>
+                    <i data-lucide="flask-conical" class="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto mb-2"></i>
+                    <p class="font-medium text-slate-700 dark:text-slate-200">Select a Document to Simulate Rules</p>
+                    <p class="text-xs text-slate-500 dark:text-slate-400">Inspect clause-by-clause boolean evaluation, OCR/metadata checks, and proposed auto-filing paths.</p>
                 </div>
             </div>
         </div>
