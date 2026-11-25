@@ -125,6 +125,7 @@ def routing_rule_detail(request, pk):
 
 
 @login_required
+@tenant_admin_required
 def routing_rule_create(request):
     if request.method == "POST":
         form = DocumentRoutingRuleForm(request.POST, tenant=request.tenant)
@@ -160,6 +161,7 @@ def routing_rule_create(request):
 
 
 @login_required
+@tenant_admin_required
 def routing_rule_edit(request, pk):
     rule = documents_object(request, DocumentRoutingRule, pk)
     if request.method == "POST":
