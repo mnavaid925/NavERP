@@ -32,7 +32,7 @@
     <div class="lg:col-span-2 space-y-6">
         <div class="card">
             <div class="card-header">
-                <h2 class="text-base font-semibold text-slate-800">Execution Telemetry</h2>
+                <h2 class="text-base font-semibold text-slate-800 dark:text-slate-100">Execution Telemetry</h2>
             </div>
             <div class="card-body">
                 <dl class="detail-grid">
@@ -43,13 +43,13 @@
                     <div class="detail-item">
                         <dt>Process Blueprint</dt>
                         <dd>
-                            <a href="{% url 'documents:process_definition_detail' instance.process_definition.pk %}" class="text-blue-600 hover:underline">{{ instance.process_definition.name }}</a>
+                            <a href="{% url 'documents:process_definition_detail' instance.process_definition.pk %}" class="text-blue-600 dark:text-blue-400 hover:underline">{{ instance.process_definition.name }}</a>
                         </dd>
                     </div>
                     <div class="detail-item">
                         <dt>Target Document</dt>
                         <dd>
-                            <a href="{% url 'documents:document_detail' instance.document.pk %}" class="text-blue-600 hover:underline">{{ instance.document.number }} — {{ instance.document.title }}</a>
+                            <a href="{% url 'documents:document_detail' instance.document.pk %}" class="text-blue-600 dark:text-blue-400 hover:underline">{{ instance.document.number }} — {{ instance.document.title }}</a>
                         </dd>
                     </div>
                     <div class="detail-item">
@@ -76,7 +76,7 @@
                         <dt>Spawned 13.3 Approval</dt>
                         <dd>
                             {% if instance.approval_workflow %}
-                            <a href="{% url 'documents:workflow_detail' instance.approval_workflow.pk %}" class="text-blue-600 hover:underline font-mono">{{ instance.approval_workflow.number }} ({{ instance.approval_workflow.get_status_display }})</a>
+                            <a href="{% url 'documents:workflow_detail' instance.approval_workflow.pk %}" class="text-blue-600 dark:text-blue-400 hover:underline font-mono">{{ instance.approval_workflow.number }} ({{ instance.approval_workflow.get_status_display }})</a>
                             {% else %}None{% endif %}
                         </dd>
                     </div>
@@ -84,15 +84,15 @@
                         <dt>Triggered By Rule</dt>
                         <dd>
                             {% if instance.triggered_by_rule %}
-                            <a href="{% url 'documents:routing_rule_detail' instance.triggered_by_rule.pk %}" class="text-blue-600 hover:underline font-mono">{{ instance.triggered_by_rule.number }}</a>
+                            <a href="{% url 'documents:routing_rule_detail' instance.triggered_by_rule.pk %}" class="text-blue-600 dark:text-blue-400 hover:underline font-mono">{{ instance.triggered_by_rule.number }}</a>
                             {% else %}Direct Launch{% endif %}
                         </dd>
                     </div>
                 </dl>
                 {% if instance.variant_signature %}
-                <div class="mt-4 pt-4 border-t border-slate-100">
-                    <div class="text-xs font-semibold uppercase text-slate-500 mb-1">Process Mining Variant Signature</div>
-                    <div class="font-mono text-xs bg-slate-50 p-2 rounded border border-slate-200">{{ instance.variant_signature }}</div>
+                <div class="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700">
+                    <div class="text-xs font-semibold uppercase text-slate-500 dark:text-slate-400 mb-1">Process Mining Variant Signature</div>
+                    <div class="font-mono text-xs bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 p-2 rounded border border-slate-200 dark:border-slate-700">{{ instance.variant_signature }}</div>
                 </div>
                 {% endif %}
             </div>
@@ -100,7 +100,7 @@
 
         <div class="card">
             <div class="card-header">
-                <h2 class="text-base font-semibold text-slate-800">Step Execution Trace ({{ step_trace|length }} Steps)</h2>
+                <h2 class="text-base font-semibold text-slate-800 dark:text-slate-100">Step Execution Trace ({{ step_trace|length }} Steps)</h2>
             </div>
             <div class="table-wrap">
                 <table class="table">
@@ -118,21 +118,21 @@
                         {% for step in step_trace %}
                         <tr>
                             <td>
-                                <div class="font-medium text-slate-800">{{ step.label|default:step.node_id }}</div>
-                                <div class="text-xs text-slate-500 font-mono">{{ step.node_id }}</div>
+                                <div class="font-medium text-slate-800 dark:text-slate-100">{{ step.label|default:step.node_id }}</div>
+                                <div class="text-xs text-slate-500 dark:text-slate-400 font-mono">{{ step.node_id }}</div>
                             </td>
-                            <td class="text-xs text-slate-600">{{ step.node_type }}{% if step.lane %} · {{ step.lane }}{% endif %}</td>
-                            <td class="text-xs font-mono text-slate-500">{{ step.entered_at|truncatechars:19 }}</td>
+                            <td class="text-xs text-slate-600 dark:text-slate-300">{{ step.node_type }}{% if step.lane %} · {{ step.lane }}{% endif %}</td>
+                            <td class="text-xs font-mono text-slate-500 dark:text-slate-400">{{ step.entered_at|truncatechars:19 }}</td>
                             <td class="text-xs font-mono">{{ step.duration_minutes|default:0 }}m</td>
                             <td>
                                 <span class="badge {% if step.outcome == 'completed' or step.outcome == 'approved' %}badge-green{% elif step.outcome == 'rework' %}badge-red{% elif step.outcome == 'pending' %}badge-amber{% else %}badge-info{% endif %}">
                                     {{ step.outcome|default:"recorded" }}
                                 </span>
                             </td>
-                            <td class="text-xs text-slate-600">{{ step.actor|default:"system" }}</td>
+                            <td class="text-xs text-slate-600 dark:text-slate-300">{{ step.actor|default:"system" }}</td>
                         </tr>
                         {% empty %}
-                        <tr><td colspan="6" class="text-center text-xs text-slate-500 py-4">No execution steps traced yet.</td></tr>
+                        <tr><td colspan="6" class="text-center text-xs text-slate-500 dark:text-slate-400 py-4">No execution steps traced yet.</td></tr>
                         {% endfor %}
                     </tbody>
                 </table>
@@ -144,7 +144,7 @@
         {% if instance.status != 'completed' and instance.status != 'cancelled' %}
         <div class="card">
             <div class="card-header">
-                <h2 class="text-base font-semibold text-slate-800">Advance Workflow Step</h2>
+                <h2 class="text-base font-semibold text-slate-800 dark:text-slate-100">Advance Workflow Step</h2>
             </div>
             <div class="card-body">
                 <form method="post" action="{% url 'documents:process_instance_advance' instance.pk %}" class="space-y-3">
@@ -168,7 +168,7 @@
 
         <div class="card">
             <div class="card-header">
-                <h2 class="text-base font-semibold text-slate-800">Actions</h2>
+                <h2 class="text-base font-semibold text-slate-800 dark:text-slate-100">Actions</h2>
             </div>
             <div class="card-body space-y-2">
                 <a href="{% url 'documents:process_instance_list' %}" class="btn btn-outline w-full justify-start">
