@@ -1,6 +1,6 @@
 """Shared BPM, routing, webhook simulation, and process mining services for DMS 13.11."""
 from collections import defaultdict, deque
-from datetime import timedelta
+from datetime import datetime, time, timedelta
 from decimal import Decimal, InvalidOperation
 import ipaddress
 import json
@@ -9,10 +9,11 @@ import re
 import socket
 from urllib.parse import urlparse
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.db.models import F
+from django.db.models import Avg, Count, F, Q
 from django.utils import timezone
 
 ALLOWED_WEBHOOK_SCHEMES = frozenset({"https", "http"})
@@ -1189,28 +1190,55 @@ def compute_process_analytics(tenant, process_def_id=None, department_id=None, d
     from apps.documents.models.WorkflowAutomation.DocumentProcessInstances import DocumentProcessInstance
     from apps.documents.models.WorkflowAutomation.DocumentRoutingRules import DocumentRoutingRule
 
-    qs = DocumentProcessInstance.objects.filter(tenant=tenant).select_related(
-        "process_definition", "department", "document"
-    )
+    qs = DocumentProcessInstance.objects.filter(tenant=tenant)
     if process_def_id and str(process_def_id).isdigit():
         qs = qs.filter(process_definition_id=int(process_def_id))
     if department_id and str(department_id).isdigit():
         qs = qs.filter(department_id=int(department_id))
+
+    tz = timezone.get_current_timezone()
     if date_from:
-        qs = qs.filter(started_at__date__gte=date_from)
+        start_dt = datetime.combine(date_from, time.min)
+        if settings.USE_TZ:
+            start_dt = timezone.make_aware(start_dt, tz)
+        qs = qs.filter(started_at__gte=start_dt)
     if date_to:
-        qs = qs.filter(started_at__date__lte=date_to)
+        end_dt = datetime.combine(date_to + timedelta(days=1), time.min)
+        if settings.USE_TZ:
+            end_dt = timezone.make_aware(end_dt, tz)
+        qs = qs.filter(started_at__lt=end_dt)
 
-    instances = list(qs)
-    total = len(instances)
-    completed = [i for i in instances if i.status == "completed"]
-    active_wip = [i for i in instances if i.status in ("queued", "running", "waiting_approval", "waiting_timer")]
-    breached = [i for i in instances if i.is_sla_breached or i.status == "sla_breached"]
-    rework_instances = [i for i in instances if (i.rework_count or 0) > 0]
-    conformant = [i for i in instances if i.is_conformant]
+    kpis = qs.aggregate(
+        total_instances=Count("id"),
+        completed_count=Count("id", filter=Q(status="completed")),
+        active_wip=Count(
+            "id",
+            filter=Q(
+                status__in=["queued", "running", "waiting_approval", "waiting_timer", "sla_breached"]
+            ),
+        ),
+        sla_breached_count=Count("id", filter=Q(is_sla_breached=True) | Q(status="sla_breached")),
+        rework_instances=Count("id", filter=Q(rework_count__gt=0)),
+        conformant_count=Count("id", filter=Q(is_conformant=True)),
+        avg_cycle=Avg(
+            "cycle_time_minutes",
+            filter=Q(status="completed", cycle_time_minutes__isnull=False),
+        ),
+    )
 
-    cycles = sorted([i.cycle_time_minutes for i in completed if i.cycle_time_minutes is not None])
-    avg_cycle = round(sum(cycles) / len(cycles), 1) if cycles else 0.0
+    total = kpis["total_instances"] or 0
+    completed_count = kpis["completed_count"] or 0
+    active_wip = kpis["active_wip"] or 0
+    breached_count = kpis["sla_breached_count"] or 0
+    rework_instances_count = kpis["rework_instances"] or 0
+    conformant_count = kpis["conformant_count"] or 0
+    avg_cycle = round(float(kpis["avg_cycle"]), 1) if kpis["avg_cycle"] is not None else 0.0
+
+    cycles = list(
+        qs.filter(status="completed", cycle_time_minutes__isnull=False)
+        .order_by("cycle_time_minutes")
+        .values_list("cycle_time_minutes", flat=True)
+    )
     if cycles:
         mid = len(cycles) // 2
         median_cycle = float(cycles[mid]) if len(cycles) % 2 == 1 else round((cycles[mid - 1] + cycles[mid]) / 2, 1)
@@ -1220,22 +1248,32 @@ def compute_process_analytics(tenant, process_def_id=None, department_id=None, d
         median_cycle = 0.0
         p95_cycle = 0.0
 
-    # Node & Lane bottlenecks
+    # Node & Lane bottlenecks + Process Mining variants via projected values_list
     node_stats = defaultdict(lambda: {"label": "", "lane": "", "executions": 0, "total_minutes": 0, "max_minutes": 0, "active_waiting": 0})
     variant_stats = defaultdict(lambda: {"count": 0, "cycles": [], "rework": 0, "conformant": 0})
 
-    for inst in instances:
-        sig = inst.variant_signature or inst.current_node_id or "start"
+    projected = qs.values_list(
+        "status",
+        "variant_signature",
+        "current_node_id",
+        "cycle_time_minutes",
+        "rework_count",
+        "is_conformant",
+        "step_trace_json",
+    )
+    for row_status, variant_sig, cur_node, cycle_mins, rework_cnt, is_conf, trace_json in projected.iterator(chunk_size=500):
+        sig = variant_sig or cur_node or "start"
         v = variant_stats[sig]
         v["count"] += 1
-        if inst.cycle_time_minutes is not None:
-            v["cycles"].append(inst.cycle_time_minutes)
-        if inst.rework_count:
+        if cycle_mins is not None:
+            v["cycles"].append(cycle_mins)
+        if rework_cnt:
             v["rework"] += 1
-        if inst.is_conformant:
+        if is_conf:
             v["conformant"] += 1
 
-        for step in inst.step_trace_json or []:
+        is_terminal = row_status in ("completed", "cancelled", "failed")
+        for step in trace_json or []:
             if not isinstance(step, dict):
                 continue
             nid = str(step.get("node_id") or "").strip()
@@ -1249,7 +1287,7 @@ def compute_process_analytics(tenant, process_def_id=None, department_id=None, d
             st["total_minutes"] += dur
             if dur > st["max_minutes"]:
                 st["max_minutes"] = dur
-            if step.get("exited_at") is None:
+            if not is_terminal and step.get("exited_at") is None:
                 st["active_waiting"] += 1
 
     bottlenecks = []
@@ -1283,21 +1321,29 @@ def compute_process_analytics(tenant, process_def_id=None, department_id=None, d
         )
     variants.sort(key=lambda r: r["count"], reverse=True)
 
-    rules_qs = DocumentRoutingRule.objects.filter(tenant=tenant).order_by("-match_count", "priority")[:10]
+    rules_qs = DocumentRoutingRule.objects.filter(tenant=tenant)
+    if process_def_id and str(process_def_id).isdigit():
+        rules_qs = rules_qs.filter(process_definition_id=int(process_def_id))
+    rules_qs = rules_qs.order_by("-match_count", "priority")[:10]
+
+    recent_instances = list(
+        qs.select_related("process_definition", "document")
+        .defer("step_trace_json", "context_variables_json", "error_message")[:10]
+    )
 
     return {
         "total_instances": total,
-        "completed_count": len(completed),
-        "active_wip": len(active_wip),
-        "sla_breached_count": len(breached),
-        "sla_breach_rate": round((len(breached) / total) * 100, 1) if total else 0.0,
+        "completed_count": completed_count,
+        "active_wip": active_wip,
+        "sla_breached_count": breached_count,
+        "sla_breach_rate": round((breached_count / total) * 100, 1) if total else 0.0,
         "avg_cycle_minutes": avg_cycle,
         "median_cycle_minutes": median_cycle,
         "p95_cycle_minutes": p95_cycle,
-        "rework_rate": round((len(rework_instances) / total) * 100, 1) if total else 0.0,
-        "conformance_rate": round((len(conformant) / total) * 100, 1) if total else 100.0,
+        "rework_rate": round((rework_instances_count / total) * 100, 1) if total else 0.0,
+        "conformance_rate": round((conformant_count / total) * 100, 1) if total else 100.0,
         "bottlenecks": bottlenecks[:15],
         "variants": variants[:12],
         "top_rules": list(rules_qs),
-        "recent_instances": instances[:10],
+        "recent_instances": recent_instances,
     }
