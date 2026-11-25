@@ -70,6 +70,7 @@
                 <div class="form-group">
                     <label class="form-label" for="{{ form.context_variables_json.id_for_label }}">Context Variables (JSON Object)</label>
                     {{ form.context_variables_json }}
+                    <div class="form-help">Optional runtime variables evaluated by gateway transitions, e.g. {"amount": 50000, "region": "EMEA"}.</div>
                     {% if form.context_variables_json.errors %}<div class="form-error">{{ form.context_variables_json.errors }}</div>{% endif %}
                 </div>
 
