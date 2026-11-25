@@ -253,9 +253,26 @@ def routing_rule_simulator(request):
                     applied_summary.append(
                         f"{item['rule'].number}: {', '.join(item['applied_actions'])}"
                     )
+            blocked_rules = [
+                item["rule"].number for item in evaluation_results if item["validation_errors"]
+            ]
             if apply_mutations:
                 write_audit_log(request.user, selected_document, "eval", tenant=request.tenant)
-                messages.success(request, f"Evaluated and applied routing rules against {selected_document.number}.")
+                if blocked_rules:
+                    messages.warning(
+                        request,
+                        f"Evaluated {selected_document.number}, but validation gates blocked: {', '.join(blocked_rules)}.",
+                    )
+                else:
+                    messages.success(
+                        request,
+                        f"Evaluated and applied routing rules against {selected_document.number}.",
+                    )
+            elif blocked_rules:
+                messages.warning(
+                    request,
+                    f"Dry-run validation gates flagged blockers for {selected_document.number}: {', '.join(blocked_rules)}.",
+                )
     else:
         initial = {}
         rule_id = request.GET.get("rule", "").strip()
