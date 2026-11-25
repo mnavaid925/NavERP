@@ -216,12 +216,16 @@ class RoutingRuleSimulatorForm(forms.Form):
     def __init__(self, *args, tenant=None, **kwargs):
         super().__init__(*args, **kwargs)
         if tenant is not None:
-            self.fields["document"].queryset = Document.objects.filter(
-                tenant=tenant
-            ).order_by("-created_at", "title")
-            self.fields["rule"].queryset = DocumentRoutingRule.objects.filter(
-                tenant=tenant
-            ).order_by("priority", "name")
+            self.fields["document"].queryset = (
+                Document.objects.filter(tenant=tenant)
+                .only("id", "number", "title", "current_version_label", "created_at", "tenant_id")
+                .order_by("-created_at", "title")
+            )
+            self.fields["rule"].queryset = (
+                DocumentRoutingRule.objects.filter(tenant=tenant)
+                .only("id", "number", "name", "priority", "tenant_id")
+                .order_by("priority", "name")
+            )
         else:
             self.fields["document"].queryset = Document.objects.none()
             self.fields["rule"].queryset = DocumentRoutingRule.objects.none()
