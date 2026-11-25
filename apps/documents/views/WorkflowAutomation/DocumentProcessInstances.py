@@ -128,7 +128,6 @@ def process_instance_list(request):
         "active_count": stats["active_count"] or 0,
         "completed_count": stats["completed_count"] or 0,
         "sla_breached_count": stats["sla_breached_count"] or 0,
-        "sla_breached_count": sla_breached_count,
         "status_choices": DocumentProcessInstance.STATUS_CHOICES,
         "process_definitions": process_definitions,
         "departments": departments,
