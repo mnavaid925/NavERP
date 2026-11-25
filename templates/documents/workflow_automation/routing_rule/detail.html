@@ -70,11 +70,26 @@
                     <div class="detail-item">
                         <dt>Target OrgUnit / Role / User</dt>
                         <dd>
-                            {% if rule.route_to_org_unit %}{{ rule.route_to_org_unit.name }}{% endif %}
-                            {% if rule.route_to_role %} · Role: {{ rule.route_to_role.name }}{% endif %}
-                            {% if rule.route_to_user %} · User: {{ rule.route_to_user.get_full_name|default:rule.route_to_user.username }}{% endif %}
-                            {% if not rule.route_to_org_unit and not rule.route_to_role and not rule.route_to_user %}—{% endif %}
+                            {% if rule.route_to_org_unit or rule.route_to_role or rule.route_to_user %}
+                            {% if rule.route_to_org_unit %}{{ rule.route_to_org_unit.name }}{% endif %}{% if rule.route_to_org_unit and rule.route_to_role %} · {% endif %}{% if rule.route_to_role %}Role: {{ rule.route_to_role.name }}{% endif %}{% if rule.route_to_user and rule.route_to_org_unit or rule.route_to_user and rule.route_to_role %} · {% endif %}{% if rule.route_to_user %}User: {{ rule.route_to_user.get_full_name|default:rule.route_to_user.username }}{% endif %}
+                            {% else %}—{% endif %}
                         </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Source Folder Scope</dt>
+                        <dd>{% if rule.source_folder %}{{ rule.source_folder.path }}{% else %}Any Folder{% endif %}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Document Type Scope</dt>
+                        <dd>{% if rule.target_document_type %}{{ rule.get_target_document_type_display }}{% else %}All Types{% endif %}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Classification Scope</dt>
+                        <dd>{% if rule.target_classification %}{{ rule.get_target_classification_display }}{% else %}All Classifications{% endif %}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Core Rule Registry</dt>
+                        <dd>{% if rule.core_rule_ref %}{{ rule.core_rule_ref.name }}{% else %}Standalone DMS Rule{% endif %}</dd>
                     </div>
                     <div class="detail-item">
                         <dt>Executions / Matches</dt>
