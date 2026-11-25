@@ -168,10 +168,18 @@ def process_instance_detail(request, pk):
             choice for choice in ProcessAdvanceForm.OUTCOME_CHOICES if choice[0] != "completed"
         ]
 
+    step_trace = instance.step_trace_json or []
+    completed_node_ids = {
+        str(step.get("node_id"))
+        for step in step_trace
+        if isinstance(step, dict) and step.get("node_id") and step.get("exited_at") is not None
+    }
     context = {
         "instance": instance,
-        "step_trace": instance.step_trace_json or [],
+        "step_trace": step_trace,
         "blueprint_nodes": instance.process_definition.nodes_json or [],
+        "completed_node_ids": completed_node_ids,
+        "context_variables": json.dumps(instance.context_variables_json or {}, indent=2),
         "advance_form": advance_form,
         "can_advance": can_advance,
         "can_force_complete": can_force_complete,
