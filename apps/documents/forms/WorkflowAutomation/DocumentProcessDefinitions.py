@@ -81,6 +81,10 @@ class DocumentProcessDefinitionForm(TenantUniqueMixin, TenantModelForm):
             self.fields["core_workflow_ref"].queryset = WorkflowDefinition.objects.filter(
                 tenant=self.tenant
             ).order_by("name")
+        else:
+            self.fields["target_folder"].queryset = DocumentFolder.objects.none()
+            self.fields["department"].queryset = OrgUnit.objects.none()
+            self.fields["core_workflow_ref"].queryset = WorkflowDefinition.objects.none()
         for opt_field in (
             "description",
             "target_document_type",
