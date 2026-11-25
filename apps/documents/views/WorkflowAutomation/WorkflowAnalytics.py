@@ -38,10 +38,16 @@ def process_analytics_dashboard(request):
         date_to=date_to,
     )
 
-    process_definitions = DocumentProcessDefinition.objects.filter(
-        tenant=request.tenant
-    ).order_by("code", "-version_number")
-    departments = OrgUnit.objects.filter(tenant=request.tenant).order_by("name")
+    process_definitions = (
+        DocumentProcessDefinition.objects.filter(tenant=request.tenant)
+        .only("id", "code", "version_number", "name", "tenant_id")
+        .order_by("code", "-version_number")
+    )
+    departments = (
+        OrgUnit.objects.filter(tenant=request.tenant)
+        .only("id", "name", "tenant_id")
+        .order_by("name")
+    )
 
     context = {
         "analytics": analytics,
