@@ -72,15 +72,21 @@ class DocumentProcessDefinitionForm(TenantUniqueMixin, TenantModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if self.tenant:
-            self.fields["target_folder"].queryset = DocumentFolder.objects.filter(
-                tenant=self.tenant
-            ).order_by("path", "name")
-            self.fields["department"].queryset = OrgUnit.objects.filter(
-                tenant=self.tenant
-            ).order_by("name")
-            self.fields["core_workflow_ref"].queryset = WorkflowDefinition.objects.filter(
-                tenant=self.tenant
-            ).order_by("name")
+            self.fields["target_folder"].queryset = (
+                DocumentFolder.objects.filter(tenant=self.tenant)
+                .only("id", "number", "path", "name", "tenant_id")
+                .order_by("path", "name")
+            )
+            self.fields["department"].queryset = (
+                OrgUnit.objects.filter(tenant=self.tenant)
+                .only("id", "name", "tenant_id")
+                .order_by("name")
+            )
+            self.fields["core_workflow_ref"].queryset = (
+                WorkflowDefinition.objects.filter(tenant=self.tenant)
+                .only("id", "name", "module_slug", "tenant_id")
+                .order_by("name")
+            )
         else:
             self.fields["target_folder"].queryset = DocumentFolder.objects.none()
             self.fields["department"].queryset = OrgUnit.objects.none()
