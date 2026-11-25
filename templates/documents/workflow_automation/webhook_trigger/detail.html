@@ -25,9 +25,15 @@
 {% if revealed_secret %}
 <div class="card mb-6 border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/50">
     <div class="card-body">
-        <div class="font-semibold text-amber-900 dark:text-amber-100 text-sm mb-1">HMAC-SHA256 Signing Secret (Displayed Once)</div>
+        <div class="flex items-center justify-between gap-2 mb-1 flex-wrap">
+            <div class="font-semibold text-amber-900 dark:text-amber-100 text-sm">HMAC-SHA256 Signing Secret (Displayed Once)</div>
+            <button type="button" class="btn btn-outline btn-sm" onclick="var el=document.getElementById('dwhk-revealed-secret');if(navigator.clipboard&&el){navigator.clipboard.writeText(el.textContent.trim());this.textContent='Copied';}">
+                <i data-lucide="copy"></i>
+                <span>Copy Secret</span>
+            </button>
+        </div>
         <p class="text-xs text-amber-800 dark:text-amber-200 mb-2">Copy and store this signing secret now. It will not be displayed again after you refresh or leave this page.</p>
-        <div class="font-mono text-xs bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 p-3 rounded border border-amber-200 dark:border-amber-700 select-all break-all">{{ revealed_secret }}</div>
+        <div id="dwhk-revealed-secret" class="font-mono text-xs bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 p-3 rounded border border-amber-200 dark:border-amber-700 select-all break-all">{{ revealed_secret }}</div>
     </div>
 </div>
 {% endif %}
@@ -114,7 +120,7 @@
                         <tr>
                             <td class="text-xs font-mono text-slate-500 dark:text-slate-400">{{ entry.timestamp|truncatechars:19 }}</td>
                             <td class="text-xs font-mono">{{ entry.event }}</td>
-                            <td><span class="badge badge-info">{{ entry.status }}</span></td>
+                            <td><span class="badge {% if entry.status == 'simulated' or entry.status == 'delivered' or entry.status == 'success' %}badge-green{% elif entry.status == 'failed' or entry.status == 'error' %}badge-red{% else %}badge-info{% endif %}">{{ entry.status }}</span></td>
                             <td class="text-xs font-mono text-slate-600 dark:text-slate-300">{{ entry.signature_header|default:"—" }}</td>
                             <td class="text-xs font-mono text-slate-600 dark:text-slate-300">{{ entry.payload_json|default:"{}"|truncatechars:70 }}</td>
                         </tr>
