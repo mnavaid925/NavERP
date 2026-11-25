@@ -569,6 +569,7 @@ def _spawn_approval_workflow_for_instance(
     target_turnaround_hours=48,
     initiator=None,
     department=None,
+    department_id=None,
     version=None,
 ):
     """Create a DocumentApprovalWorkflow linked to a BPM step/rule with due_date."""
@@ -577,6 +578,11 @@ def _spawn_approval_workflow_for_instance(
     )
 
     hours = target_turnaround_hours or 48
+    resolved_dept_id = (
+        department_id
+        or (department.id if department is not None else None)
+        or document.department_id
+    )
     return DocumentApprovalWorkflow.objects.create(
         tenant=tenant,
         document=document,
@@ -587,7 +593,7 @@ def _spawn_approval_workflow_for_instance(
         target_turnaround_hours=hours,
         due_date=timezone.now() + timedelta(hours=hours),
         initiator=initiator or document.owner,
-        department=department or document.department,
+        department_id=resolved_dept_id,
     )
 
 
@@ -1465,7 +1471,9 @@ def start_process_instance(
                     title=f"BPM: {process_definition.name} — {document.title}",
                     target_turnaround_hours=process_definition.sla_target_hours or 48,
                     initiator=actor or document.owner,
-                    department=department or document.department,
+                    department_id=(department.id if department is not None else None)
+                    or process_definition.department_id
+                    or document.department_id,
                     version=version,
                 )
             elif ntype == "timer_event":
@@ -1476,6 +1484,11 @@ def start_process_instance(
                 trace[-1]["outcome"] = "completed"
 
         due_at = now + timedelta(hours=process_definition.sla_target_hours or 48)
+        resolved_dept_id = (
+            (department.id if department is not None else None)
+            or process_definition.department_id
+            or document.department_id
+        )
         instance = DocumentProcessInstance.objects.create(
             tenant=tenant,
             process_definition=process_definition,
@@ -1483,7 +1496,7 @@ def start_process_instance(
             version=version,
             triggered_by_rule=triggered_by_rule,
             approval_workflow=approval_wf,
-            department=department or process_definition.department or document.department,
+            department_id=resolved_dept_id,
             initiated_by=actor,
             current_assignee=assignee,
             status=status,
