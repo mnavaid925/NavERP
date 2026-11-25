@@ -16,7 +16,7 @@
         <div class="flex items-center gap-3 flex-wrap">
             <h1 class="page-title">{{ instance.number }} — {{ instance.process_definition.name }}</h1>
             <span class="badge {{ instance.status_badge }}">{{ instance.get_status_display }}</span>
-            <span class="badge {{ instance.sla_badge }}">{% if instance.is_sla_breached %}SLA Breached{% else %}SLA On Track{% endif %}</span>
+            <span class="badge {{ instance.sla_badge }}">{% if instance.is_sla_breached or instance.status == 'sla_breached' %}SLA Breached{% else %}SLA On Track{% endif %}</span>
             <span class="badge {{ instance.conformance_badge }}">{% if instance.is_conformant %}Conformant{% else %}Rework / Detour{% endif %}</span>
         </div>
     </div>
@@ -125,7 +125,7 @@
                             <td class="text-xs font-mono text-slate-500 dark:text-slate-400">{{ step.entered_at|truncatechars:19 }}</td>
                             <td class="text-xs font-mono">{{ step.duration_minutes|default:0 }}m</td>
                             <td>
-                                <span class="badge {% if step.outcome == 'completed' or step.outcome == 'approved' %}badge-green{% elif step.outcome == 'rework' %}badge-red{% elif step.outcome == 'pending' %}badge-amber{% else %}badge-info{% endif %}">
+                                <span class="badge {% if step.outcome == 'completed' or step.outcome == 'approved' or step.outcome == 'started' %}badge-green{% elif step.outcome == 'rework' or step.outcome == 'rejected' or step.outcome == 'escalated' or step.outcome == 'sla_breached' %}badge-red{% elif step.outcome == 'pending' %}badge-amber{% elif step.outcome == 'cancelled' %}badge-slate{% else %}badge-info{% endif %}">
                                     {{ step.outcome|default:"recorded" }}
                                 </span>
                             </td>
