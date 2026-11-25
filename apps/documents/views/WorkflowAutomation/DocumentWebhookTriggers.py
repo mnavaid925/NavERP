@@ -254,15 +254,16 @@ def webhook_trigger_test_ping(request, pk):
         "document_number": doc.number if doc else "SAMPLE-DOC",
         "document_title": doc.title if doc else "Sample Document Payload",
     }
-    dispatch_simulated_webhook(
-        webhook,
-        event_name,
-        payload_data,
-        document=doc,
-        actor=request.user,
-        request=request,
-    )
-    write_audit_log(request.user, webhook, "ping", tenant=request.tenant)
+    with transaction.atomic():
+        dispatch_simulated_webhook(
+            webhook,
+            event_name,
+            payload_data,
+            document=doc,
+            actor=request.user,
+            request=request,
+        )
+        write_audit_log(request.user, webhook, "ping", tenant=request.tenant)
     messages.success(
         request,
         f"Simulated signed webhook delivery recorded for {webhook.number} (zero outbound HTTP).",
@@ -297,51 +298,54 @@ def webhook_trigger_simulate_inbound(request, pk):
 
     if webhook.process_definition_id and doc is not None:
         try:
-            inst = start_process_instance(
-                tenant=request.tenant,
-                process_definition=webhook.process_definition,
-                document=doc,
-                actor=request.user,
-                context_variables={"inbound_webhook": webhook.number},
-                request=request,
-            )
+            with transaction.atomic():
+                inst = start_process_instance(
+                    tenant=request.tenant,
+                    process_definition=webhook.process_definition,
+                    document=doc,
+                    actor=request.user,
+                    context_variables={"inbound_webhook": webhook.number},
+                    request=request,
+                )
+                dispatch_simulated_webhook(
+                    webhook,
+                    "inbound.trigger",
+                    {"launched_instance": inst.number, "document": doc.number},
+                    document=doc,
+                    actor=request.user,
+                    request=request,
+                )
+                write_audit_log(request.user, webhook, "inbound", tenant=request.tenant)
         except ValidationError as exc:
-            dispatch_simulated_webhook(
-                webhook,
-                "inbound.trigger",
-                {"note": f"Callback logged; process launch skipped ({exc.messages[0]})", "document": doc.number},
-                document=doc,
-                actor=request.user,
-                request=request,
-            )
-            write_audit_log(request.user, webhook, "inbound", tenant=request.tenant)
+            with transaction.atomic():
+                dispatch_simulated_webhook(
+                    webhook,
+                    "inbound.trigger",
+                    {"note": f"Callback logged; process launch skipped ({exc.messages[0]})", "document": doc.number},
+                    document=doc,
+                    actor=request.user,
+                    request=request,
+                )
+                write_audit_log(request.user, webhook, "inbound", tenant=request.tenant)
             messages.warning(
                 request,
                 f"Simulated inbound callback logged, but linked blueprint could not launch: {exc.messages[0]}",
             )
             return redirect("documents:webhook_trigger_detail", pk=webhook.pk)
-        dispatch_simulated_webhook(
-            webhook,
-            "inbound.trigger",
-            {"launched_instance": inst.number, "document": doc.number},
-            document=doc,
-            actor=request.user,
-            request=request,
-        )
-        write_audit_log(request.user, webhook, "inbound", tenant=request.tenant)
         messages.success(
             request,
             f"Simulated inbound webhook triggered process instance {inst.number} for {doc.number}.",
         )
     else:
-        dispatch_simulated_webhook(
-            webhook,
-            "inbound.trigger",
-            {"note": "Simulated inbound callback payload received locally"},
-            document=doc,
-            actor=request.user,
-            request=request,
-        )
-        write_audit_log(request.user, webhook, "inbound", tenant=request.tenant)
+        with transaction.atomic():
+            dispatch_simulated_webhook(
+                webhook,
+                "inbound.trigger",
+                {"note": "Simulated inbound callback payload received locally"},
+                document=doc,
+                actor=request.user,
+                request=request,
+            )
+            write_audit_log(request.user, webhook, "inbound", tenant=request.tenant)
         messages.info(request, f"Simulated inbound event logged for {webhook.number}.")
     return redirect("documents:webhook_trigger_detail", pk=webhook.pk)
