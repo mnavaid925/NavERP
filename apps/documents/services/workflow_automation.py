@@ -378,6 +378,104 @@ def evaluate_condition_clause(clause, doc_ctx):
     }
 
 
+def _select_outgoing_edge(outgoing, doc_ctx=None):
+    """Pick matching conditional edge first, then default edge, then first edge."""
+    if doc_ctx is not None:
+        for edge in outgoing:
+            cond = edge.get("condition")
+            if isinstance(cond, dict) and cond.get("field"):
+                res = evaluate_condition_clause(cond, doc_ctx)
+                if res["matched"]:
+                    return edge
+    for edge in outgoing:
+        if edge.get("is_default"):
+            return edge
+    return outgoing[0] if outgoing else None
+
+
+def _spawn_approval_workflow_for_instance(
+    tenant,
+    document,
+    title,
+    target_turnaround_hours=48,
+    initiator=None,
+    department=None,
+    version=None,
+):
+    """Create a DocumentApprovalWorkflow linked to a BPM step/rule with due_date."""
+    from apps.documents.models.ApprovalWorkflow.DocumentApprovalWorkflows import (
+        DocumentApprovalWorkflow,
+    )
+
+    hours = target_turnaround_hours or 48
+    return DocumentApprovalWorkflow.objects.create(
+        tenant=tenant,
+        document=document,
+        version=version,
+        title=title[:255],
+        workflow_type="sequential",
+        status="draft",
+        target_turnaround_hours=hours,
+        due_date=timezone.now() + timedelta(hours=hours),
+        initiator=initiator or document.owner,
+        department=department or document.department,
+    )
+
+
+def _close_active_trace_step(trace, now, outcome, notes=""):
+    """Close open trailing step_trace_json item with duration and outcome."""
+    if not (trace and trace[-1].get("exited_at") is None):
+        return
+    entered_raw = trace[-1].get("entered_at")
+    dur_mins = 1
+    if entered_raw:
+        from django.utils.dateparse import parse_datetime
+
+        try:
+            entered_dt = parse_datetime(entered_raw)
+            if entered_dt:
+                dur_mins = max(1, int((now - entered_dt).total_seconds() // 60))
+        except Exception:
+            dur_mins = 1
+    trace[-1]["exited_at"] = now.isoformat()
+    trace[-1]["duration_minutes"] = dur_mins
+    trace[-1]["outcome"] = outcome
+    if notes:
+        trace[-1]["notes"] = notes[:200]
+
+
+def _dispatch_process_webhooks(
+    tenant,
+    event_name,
+    payload_data,
+    process_definition_id=None,
+    document=None,
+    actor=None,
+    request=None,
+):
+    """Dispatch active simulated webhooks for a BPM lifecycle event."""
+    from apps.documents.models.WorkflowAutomation.DocumentWebhookTriggers import (
+        DocumentWebhookTrigger,
+    )
+
+    webhooks = DocumentWebhookTrigger.objects.filter(
+        tenant=tenant,
+        is_active=True,
+        trigger_event=event_name,
+    ).select_related("tenant")
+    for wh in webhooks:
+        if wh.process_definition_id and process_definition_id and wh.process_definition_id != process_definition_id:
+            continue
+        dispatch_simulated_webhook(
+            wh,
+            event_name,
+            payload_data,
+            document=document,
+            actor=actor,
+            request=request,
+        )
+
+
 def simulate_process_path(process_def, context=None):
     """Run a deterministic dry-run path walk from start_event across BPMN nodes."""
     nodes = process_def.nodes_json or []
@@ -405,21 +503,7 @@ def simulate_process_path(process_def, context=None):
             break
         node = node_map[current_id]
         edges = outgoing.get(current_id, [])
-        chosen_edge = None
-        for edge in edges:
-            cond = edge.get("condition")
-            if isinstance(cond, dict) and cond.get("field"):
-                res = evaluate_condition_clause(cond, doc_ctx)
-                if res["matched"]:
-                    chosen_edge = edge
-                    break
-        if chosen_edge is None:
-            for edge in edges:
-                if edge.get("is_default"):
-                    chosen_edge = edge
-                    break
-        if chosen_edge is None and edges:
-            chosen_edge = edges[0]
+        chosen_edge = _select_outgoing_edge(edges, doc_ctx=doc_ctx)
 
         steps.append(
             {
@@ -768,12 +852,11 @@ def evaluate_routing_rules(
                         )
                         applied_actions.append("task_created")
                     elif rule.route_action == "spawn_approval_workflow":
-                        wf = DocumentApprovalWorkflow.objects.create(
+                        wf = _spawn_approval_workflow_for_instance(
                             tenant=tenant,
                             document=document,
-                            title=f"{rule.name} — {document.title}"[:255],
-                            workflow_type="sequential",
-                            status="draft",
+                            title=f"{rule.name} — {document.title}",
+                            target_turnaround_hours=48,
                             initiator=actor or document.owner,
                             department=rule.route_to_org_unit or document.department,
                         )
@@ -870,10 +953,8 @@ def start_process_instance(
     request=None,
 ):
     """Initialize and launch a live DocumentProcessInstance for a document."""
-    from apps.documents.models.ApprovalWorkflow.DocumentApprovalWorkflows import DocumentApprovalWorkflow
     from apps.documents.models.WorkflowAutomation.DocumentProcessDefinitions import DocumentProcessDefinition
     from apps.documents.models.WorkflowAutomation.DocumentProcessInstances import DocumentProcessInstance
-    from apps.documents.models.WorkflowAutomation.DocumentWebhookTriggers import DocumentWebhookTrigger
     from apps.documents.services.audit import log_document_event
 
     if process_definition.status != "published" or not process_definition.is_active:
@@ -935,16 +1016,14 @@ def start_process_instance(
             ntype = active_node.get("type")
             if ntype == "approval_subprocess":
                 status = "waiting_approval"
-                approval_wf = DocumentApprovalWorkflow.objects.create(
+                approval_wf = _spawn_approval_workflow_for_instance(
                     tenant=tenant,
                     document=document,
-                    version=version,
-                    title=f"BPM: {process_definition.name} — {document.title}"[:255],
-                    workflow_type="sequential",
-                    status="draft",
+                    title=f"BPM: {process_definition.name} — {document.title}",
                     target_turnaround_hours=process_definition.sla_target_hours or 48,
                     initiator=actor or document.owner,
                     department=department or document.department,
+                    version=version,
                 )
             elif ntype == "timer_event":
                 status = "waiting_timer"
@@ -987,76 +1066,110 @@ def start_process_instance(
             request=request,
             details={"bpm_event": "process.started", "instance": instance.number, "process": process_definition.number},
         )
-        webhooks = DocumentWebhookTrigger.objects.filter(
+        _dispatch_process_webhooks(
             tenant=tenant,
-            is_active=True,
-            trigger_event="process.started",
+            event_name="process.started",
+            payload_data={"instance": instance.number, "document": document.number, "process": process_definition.number},
+            process_definition_id=process_definition.id,
+            document=document,
+            actor=actor,
+            request=request,
         )
-        for wh in webhooks:
-            if wh.process_definition_id and wh.process_definition_id != process_definition.id:
-                continue
-            dispatch_simulated_webhook(
-                wh,
-                "process.started",
-                {"instance": instance.number, "document": document.number, "process": process_definition.number},
-                document=document,
-                actor=actor,
-                request=request,
-            )
     return instance
 
 
 def advance_process_instance(instance, outcome="approved", actor=None, notes="", request=None):
     """Advance an active DocumentProcessInstance along its BPMN blueprint or record rework."""
-    from apps.documents.models.WorkflowAutomation.DocumentWebhookTriggers import DocumentWebhookTrigger
+    from apps.documents.models.WorkflowAutomation.DocumentProcessInstances import DocumentProcessInstance
     from apps.documents.services.audit import log_document_event
 
-    if instance.status in ("completed", "cancelled"):
-        return instance
-
-    now = timezone.now()
-    nodes = instance.process_definition.nodes_json or []
-    transitions = instance.process_definition.transitions_json or []
-    node_map = {str(n.get("id")): n for n in nodes if isinstance(n, dict) and n.get("id")}
-    trace = list(instance.step_trace_json or [])
-
-    # Close out active trace entry
-    if trace and trace[-1].get("exited_at") is None:
-        entered_raw = trace[-1].get("entered_at")
-        dur_mins = 1
-        if entered_raw:
-            try:
-                from django.utils.dateparse import parse_datetime
-
-                entered_dt = parse_datetime(entered_raw)
-                if entered_dt:
-                    dur_mins = max(1, int((now - entered_dt).total_seconds() // 60))
-            except Exception:
-                dur_mins = 1
-        trace[-1]["exited_at"] = now.isoformat()
-        trace[-1]["duration_minutes"] = dur_mins
-        trace[-1]["outcome"] = outcome
-        if notes:
-            trace[-1]["notes"] = notes[:200]
-
     with transaction.atomic():
-        if outcome == "escalated":
-            instance.is_sla_breached = True
-            instance.status = "sla_breached"
-            instance.step_trace_json = trace
-            instance.variant_signature = _build_variant_signature(trace)
-            instance.save(update_fields=["is_sla_breached", "status", "step_trace_json", "variant_signature", "updated_at"])
-            return instance
+        locked = (
+            DocumentProcessInstance.objects.select_for_update()
+            .select_related(
+                "process_definition",
+                "document",
+                "version",
+                "tenant",
+                "department",
+                "initiated_by",
+                "current_assignee",
+            )
+            .get(pk=instance.pk)
+        )
+        if locked.status in ("completed", "cancelled"):
+            return locked
 
-        if outcome == "rejected":
-            instance.rework_count = (instance.rework_count or 0) + 1
-            instance.is_conformant = False
-            instance.status = "running"
+        now = timezone.now()
+        nodes = locked.process_definition.nodes_json or []
+        transitions = locked.process_definition.transitions_json or []
+        node_map = {str(n.get("id")): n for n in nodes if isinstance(n, dict) and n.get("id")}
+        trace = list(locked.step_trace_json or [])
+
+        _close_active_trace_step(trace, now, outcome=outcome, notes=notes)
+
+        if outcome == "escalated":
             trace.append(
                 {
-                    "node_id": instance.current_node_id or "rework",
+                    "node_id": locked.current_node_id or "sla_breach",
+                    "node_type": "sla_event",
+                    "label": f"SLA Breach: {locked.current_node_label or 'Escalated'}"[:160],
+                    "lane": "",
+                    "entered_at": now.isoformat(),
+                    "exited_at": None,
+                    "duration_minutes": 0,
+                    "outcome": "sla_breached",
+                    "actor": actor.username if actor else "system",
+                }
+            )
+            locked.is_sla_breached = True
+            locked.status = "sla_breached"
+            locked.step_trace_json = trace
+            locked.variant_signature = _build_variant_signature(trace)
+            locked.save(
+                update_fields=["is_sla_breached", "status", "step_trace_json", "variant_signature", "updated_at"]
+            )
+            log_document_event(
+                tenant=locked.tenant,
+                action_type="edited",
+                document=locked.document,
+                version=locked.version,
+                actor=actor,
+                request=request,
+                is_success=False,
+                failure_reason="sla_breached",
+                details={
+                    "bpm_event": "process.sla_breached",
+                    "instance": locked.number,
+                    "node": locked.current_node_id,
+                    "notes": (notes or "")[:200],
+                },
+            )
+            _dispatch_process_webhooks(
+                tenant=locked.tenant,
+                event_name="process.sla_breached",
+                payload_data={
+                    "instance": locked.number,
+                    "document": locked.document.number,
+                    "process": locked.process_definition.number,
+                    "node": locked.current_node_id,
+                },
+                process_definition_id=locked.process_definition_id,
+                document=locked.document,
+                actor=actor,
+                request=request,
+            )
+            return locked
+
+        if outcome == "rejected":
+            locked.rework_count = (locked.rework_count or 0) + 1
+            locked.is_conformant = False
+            locked.status = "running"
+            trace.append(
+                {
+                    "node_id": locked.current_node_id or "rework",
                     "node_type": "user_task",
-                    "label": f"Rework: {instance.current_node_label or 'Task'}"[:160],
+                    "label": f"Rework: {locked.current_node_label or 'Task'}"[:160],
                     "lane": "",
                     "entered_at": now.isoformat(),
                     "exited_at": None,
@@ -1065,10 +1178,28 @@ def advance_process_instance(instance, outcome="approved", actor=None, notes="",
                     "actor": actor.username if actor else "system",
                 }
             )
-            instance.step_trace_json = trace
-            instance.variant_signature = _build_variant_signature(trace)
-            instance.save(update_fields=["rework_count", "is_conformant", "status", "step_trace_json", "variant_signature", "updated_at"])
-            return instance
+            locked.step_trace_json = trace
+            locked.variant_signature = _build_variant_signature(trace)
+            locked.save(
+                update_fields=["rework_count", "is_conformant", "status", "step_trace_json", "variant_signature", "updated_at"]
+            )
+            log_document_event(
+                tenant=locked.tenant,
+                action_type="workflow_rejected",
+                document=locked.document,
+                version=locked.version,
+                actor=actor,
+                request=request,
+                is_success=False,
+                failure_reason="step_rejected",
+                details={
+                    "bpm_event": "process.rework",
+                    "instance": locked.number,
+                    "node": locked.current_node_id,
+                    "notes": (notes or "")[:200],
+                },
+            )
+            return locked
 
         if outcome == "completed":
             next_node = None
@@ -1078,16 +1209,24 @@ def advance_process_instance(instance, outcome="approved", actor=None, notes="",
                     break
         else:
             outgoing = [
-                e for e in transitions if isinstance(e, dict) and str(e.get("from_node")) == str(instance.current_node_id)
+                e for e in transitions if isinstance(e, dict) and str(e.get("from_node")) == str(locked.current_node_id)
             ]
-            chosen = next((e for e in outgoing if e.get("is_default")), outgoing[0] if outgoing else None)
+            has_cond = any(
+                isinstance(e.get("condition"), dict) and e["condition"].get("field") for e in outgoing
+            )
+            doc_ctx = None
+            if has_cond:
+                doc_ctx = build_document_context(locked.tenant, locked.document)
+                if isinstance(locked.context_variables_json, dict) and locked.context_variables_json:
+                    doc_ctx["context"] = {**doc_ctx["document"], **locked.context_variables_json}
+            chosen = _select_outgoing_edge(outgoing, doc_ctx=doc_ctx)
             next_id = str(chosen.get("to_node")) if chosen else ""
             next_node = node_map.get(next_id)
             if not next_node and nodes:
                 # Fallback to sequential order in nodes_json
                 ids = [str(n.get("id")) for n in nodes if isinstance(n, dict) and n.get("id")]
-                if instance.current_node_id in ids:
-                    idx = ids.index(instance.current_node_id)
+                if locked.current_node_id in ids:
+                    idx = ids.index(locked.current_node_id)
                     if idx + 1 < len(ids):
                         next_node = node_map.get(ids[idx + 1])
 
@@ -1107,40 +1246,52 @@ def advance_process_instance(instance, outcome="approved", actor=None, notes="",
                     "actor": actor.username if actor else "system",
                 }
             )
-            instance.status = "completed"
-            instance.current_node_id = end_id
-            instance.current_node_label = end_label[:160]
-            instance.completed_at = now
-            if instance.started_at:
-                instance.cycle_time_minutes = max(1, int((now - instance.started_at).total_seconds() // 60))
-            if instance.due_at and now > instance.due_at:
-                instance.is_sla_breached = True
-            instance.step_trace_json = trace
-            instance.variant_signature = _build_variant_signature(trace)
-            instance.save()
+            locked.status = "completed"
+            locked.current_node_id = end_id
+            locked.current_node_label = end_label[:160]
+            locked.completed_at = now
+            if locked.started_at:
+                locked.cycle_time_minutes = max(1, int((now - locked.started_at).total_seconds() // 60))
+            if locked.due_at and now > locked.due_at:
+                locked.is_sla_breached = True
+            locked.step_trace_json = trace
+            locked.variant_signature = _build_variant_signature(trace)
+            locked.save(
+                update_fields=[
+                    "status",
+                    "current_node_id",
+                    "current_node_label",
+                    "completed_at",
+                    "cycle_time_minutes",
+                    "is_sla_breached",
+                    "step_trace_json",
+                    "variant_signature",
+                    "updated_at",
+                ]
+            )
 
             log_document_event(
-                tenant=instance.tenant,
+                tenant=locked.tenant,
                 action_type="workflow_approved",
-                document=instance.document,
-                version=instance.version,
+                document=locked.document,
+                version=locked.version,
                 actor=actor,
                 request=request,
-                details={"bpm_event": "process.completed", "instance": instance.number},
+                details={"bpm_event": "process.completed", "instance": locked.number},
             )
-            for wh in DocumentWebhookTrigger.objects.filter(
-                tenant=instance.tenant, is_active=True, trigger_event="process.completed"
-            ):
-                if wh.process_definition_id and wh.process_definition_id != instance.process_definition_id:
-                    continue
-                dispatch_simulated_webhook(
-                    wh,
-                    "process.completed",
-                    {"instance": instance.number, "document": instance.document.number, "cycle_time_minutes": instance.cycle_time_minutes},
-                    document=instance.document,
-                    actor=actor,
-                    request=request,
-                )
+            _dispatch_process_webhooks(
+                tenant=locked.tenant,
+                event_name="process.completed",
+                payload_data={
+                    "instance": locked.number,
+                    "document": locked.document.number,
+                    "cycle_time_minutes": locked.cycle_time_minutes,
+                },
+                process_definition_id=locked.process_definition_id,
+                document=locked.document,
+                actor=actor,
+                request=request,
+            )
         else:
             nid = str(next_node.get("id"))
             nlabel = str(next_node.get("label") or nid)[:160]
@@ -1158,26 +1309,83 @@ def advance_process_instance(instance, outcome="approved", actor=None, notes="",
                     "actor": actor.username if actor else "system",
                 }
             )
-            instance.current_node_id = nid
-            instance.current_node_label = nlabel
-            instance.status = "waiting_approval" if ntype == "approval_subprocess" else (
+            locked.current_node_id = nid
+            locked.current_node_label = nlabel
+            locked.status = "waiting_approval" if ntype == "approval_subprocess" else (
                 "waiting_timer" if ntype == "timer_event" else "running"
             )
-            if instance.due_at and now > instance.due_at:
-                instance.is_sla_breached = True
-            instance.step_trace_json = trace
-            instance.variant_signature = _build_variant_signature(trace)
-            instance.save()
+            update_fields = [
+                "current_node_id",
+                "current_node_label",
+                "status",
+                "step_trace_json",
+                "variant_signature",
+                "updated_at",
+            ]
+            if ntype == "approval_subprocess" and not locked.approval_workflow_id:
+                locked.approval_workflow = _spawn_approval_workflow_for_instance(
+                    tenant=locked.tenant,
+                    document=locked.document,
+                    title=f"BPM: {locked.process_definition.name} — {locked.document.title}",
+                    target_turnaround_hours=locked.process_definition.sla_target_hours or 48,
+                    initiator=actor or locked.initiated_by or locked.document.owner,
+                    department=locked.department or locked.document.department,
+                    version=locked.version,
+                )
+                update_fields.append("approval_workflow")
+            if locked.due_at and now > locked.due_at:
+                locked.is_sla_breached = True
+                update_fields.append("is_sla_breached")
+            locked.step_trace_json = trace
+            locked.variant_signature = _build_variant_signature(trace)
+            locked.save(update_fields=update_fields)
             log_document_event(
-                tenant=instance.tenant,
+                tenant=locked.tenant,
                 action_type="edited",
-                document=instance.document,
-                version=instance.version,
+                document=locked.document,
+                version=locked.version,
                 actor=actor,
                 request=request,
-                details={"bpm_event": "process.advanced", "instance": instance.number, "node": nid},
+                details={"bpm_event": "process.advanced", "instance": locked.number, "node": nid},
             )
-    return instance
+    return locked
+
+
+def cancel_process_instance(instance, actor=None, notes="", request=None):
+    """Cancel an active DocumentProcessInstance atomically and close open trace steps."""
+    from apps.documents.models.WorkflowAutomation.DocumentProcessInstances import DocumentProcessInstance
+    from apps.documents.services.audit import log_document_event
+
+    with transaction.atomic():
+        locked = (
+            DocumentProcessInstance.objects.select_for_update()
+            .select_related("process_definition", "document", "version", "tenant")
+            .get(pk=instance.pk)
+        )
+        if locked.status in ("completed", "cancelled"):
+            return locked
+
+        now = timezone.now()
+        trace = list(locked.step_trace_json or [])
+        _close_active_trace_step(trace, now, outcome="cancelled", notes=notes)
+
+        locked.status = "cancelled"
+        locked.completed_at = now
+        locked.step_trace_json = trace
+        locked.variant_signature = _build_variant_signature(trace)
+        locked.save(
+            update_fields=["status", "completed_at", "step_trace_json", "variant_signature", "updated_at"]
+        )
+        log_document_event(
+            tenant=locked.tenant,
+            action_type="edited",
+            document=locked.document,
+            version=locked.version,
+            actor=actor,
+            request=request,
+            details={"bpm_event": "process.cancelled", "instance": locked.number, "notes": (notes or "")[:200]},
+        )
+    return locked
 
 
 def dispatch_simulated_webhook(trigger, event_name, payload_data, document=None, actor=None, request=None):
