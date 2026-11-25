@@ -161,10 +161,12 @@
                     <i data-lucide="arrow-left"></i>
                     <span>Back to Routing Rules</span>
                 </a>
+                {% if user.is_superuser or user.is_tenant_admin %}
                 <a href="{% url 'documents:routing_rule_edit' rule.pk %}" class="btn btn-outline w-full justify-start">
                     <i data-lucide="pencil"></i>
                     <span>Edit Rule</span>
                 </a>
+                {% endif %}
                 <a href="{% url 'documents:routing_rule_simulator' %}?rule={{ rule.pk }}" class="btn btn-outline w-full justify-start">
                     <i data-lucide="flask-conical"></i>
                     <span>Simulate Against Document</span>
